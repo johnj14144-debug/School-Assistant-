@@ -29,6 +29,7 @@ pnpm lint:fix         # Biome format + safe fixes
 pnpm test             # Vitest (all projects)
 pnpm build            # production build of the desktop app (apps/desktop/out)
 pnpm --filter @sa/desktop dist   # Windows installer (run on Windows)
+pnpm fable-kit        # bundle the whole project into one file for an outside review
 ```
 
 ## Layout and conventions

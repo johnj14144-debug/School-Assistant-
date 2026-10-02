@@ -1,66 +1,62 @@
 # Session prompts
 
-Ready-to-run prompts for specific Claude Code sessions. Each folder holds the system prompt, the
-message, and any settings that session needs. `next-session.md` (written by the review session)
-is the prompt for the next build session.
+## Fable review (one time)
 
-## 01 — Fable deep review ($13 of Console credits)
+Fable, on your other Claude account, reads the whole project and writes **one file** listing
+every change and fix it suggests. Then a Claude Code session here applies them for you.
 
-A one-time, unattended session that does five things:
-- reviews the whole plan and codebase
-- checks the plan's assumptions against current sources
-- revises the docs
-- makes the foundation sturdier
-- writes `docs/prompts/next-session.md`, the prompt for the first build session afterwards
+### Step 1: Get the kit
 
-It runs on **Anthropic Console credits** with a hard cap of **$13**, using a Fable model. This
-session doesn't use the Pro plan.
+Download **`fable-review-kit.md`**. Claude sent it to you in the chat. It holds Fable's
+instructions plus the whole project in one file.
 
-### Run it (Windows PowerShell)
+To make a fresh one later, start a session here and ask: `Make me a new Fable kit.`
 
-1. Get the latest code. Merge PR #1 on GitHub once CI passes, then in your clone:
+### Step 2: Give it to Fable
 
-   ```powershell
-   git switch main
-   git pull
-   pnpm install
+1. Open your other Claude account in your web browser and start a **new chat with Fable**.
+2. Attach `fable-review-kit.md` with the attach (paperclip) button. If there's no attach
+   button, open the file, select all, copy, and paste it in.
+3. Send:
+
+   ```text
+   Follow the instructions at the top of the attached file.
    ```
 
-2. Sign Claude Code in to your Console account (this switches it off your Pro login):
+4. If you see a setting for maximum length ("max tokens"), set it to the highest number.
+5. If Fable stops before it's finished, reply `continue`.
 
-   ```powershell
-   claude auth login --console
+**Optional second pass.** This uses more of your $13 and catches Fable's own mistakes. When
+Fable is done, send:
+
+```text
+Now act as a strict second reviewer of your fable-review.md. Check every change against the project files for mistakes or missing pieces, then give me the complete corrected fable-review.md.
+```
+
+Then use the newer file in step 3.
+
+### Step 3: Save Fable's answer
+
+Download the file Fable made, **`fable-review.md`**. If it didn't make a file, copy its whole
+answer instead.
+
+### Step 4: Let Claude Code apply it
+
+1. Here in Claude Code, start a **new session** on School-Assistant-.
+2. Attach `fable-review.md`, or paste Fable's answer.
+3. Send:
+
+   ```text
+   Apply the attached Fable review by following docs/prompts/apply-review.md.
    ```
 
-3. Start the run from the repo folder (one line):
+4. Answer its multiple-choice questions. It does the rest and tells you when it's done.
 
-   ```powershell
-   claude -p "Read docs/prompts/01-fable-review/message.md and carry out that task exactly." --model claude-fable-5-1 --effort xhigh --max-budget-usd 13 --append-system-prompt-file docs/prompts/01-fable-review/system-prompt.md --settings docs/prompts/01-fable-review/settings.json --permission-mode acceptEdits --permission-prompts none
-   ```
+## Files here
 
-   It works quietly and prints a summary at the end, which can take a while. To watch progress,
-   look at `git log review/plan-revision` in another window; it commits after every phase.
+| File | What it is |
+|---|---|
+| [fable-review.md](fable-review.md) | Prompt 1: Fable's instructions (the top of the kit) |
+| [apply-review.md](apply-review.md) | Prompt 2: instructions for the Claude Code session that applies Fable's review |
 
-   - **Model:** `claude-fable-5-1` costs the same per token as Fable 5, but its cached reads are
-     much cheaper, so $13 goes further in a long session. To use Fable 5 instead, swap in
-     `--model claude-fable-5`.
-   - **Effort:** `--effort xhigh` is deep but leaves budget for real work. `max` thinks harder
-     per step but gets fewer steps done for $13.
-
-4. **If it stops at the cap before finishing:** everything up to the last finished phase is
-   already committed. Run this cheap wrap-up, which uses Sonnet and a fresh session so it
-   doesn't pay to reload the long Fable conversation:
-
-   ```powershell
-   claude -p "The review session from docs/prompts/01-fable-review stopped at its budget cap. On branch review/plan-revision, read git log, docs/STATUS.md, docs/ROADMAP.md and docs/reviews/. If there are uncommitted changes, commit them only if pnpm check passes; otherwise leave them and say so in docs/STATUS.md. Then do only Phase 5 of docs/prompts/01-fable-review/message.md." --model sonnet --max-budget-usd 2 --settings docs/prompts/01-fable-review/settings.json --permission-mode acceptEdits --permission-prompts none
-   ```
-
-5. Switch Claude Code back to your Pro plan for everyday use (the app needs this later):
-
-   ```powershell
-   claude auth login
-   ```
-
-6. On GitHub, open a pull request from `review/plan-revision`, read
-   `docs/reviews/2026-10-plan-review.md`, and decide on its pitches and questions. Then start the
-   next session with `docs/prompts/next-session.md`.
+The kit is built by `scripts/make-fable-kit.mjs` (`pnpm fable-kit`).

@@ -11,17 +11,17 @@ _Last updated: 2026-10-02 (session 1: brainstorm + M0)_
   tests are green.
 - Nothing is stored yet: there is no database and no real features.
 
-## Next session: Fable deep review, then M1
+## Next session: Fable review, then apply it, then M1
 
-1. **Deep review (owner's Console credits, $13 cap).** Run the unattended review described in
-   `docs/prompts/01-fable-review/` (see `docs/prompts/README.md` for the exact command). It
-   verifies the plan's assumptions, writes `docs/reviews/2026-10-plan-review.md`, revises the docs,
-   hardens the foundation on the owner's Windows machine, and writes `docs/prompts/next-session.md`.
-2. **Then the first build session** uses `docs/prompts/next-session.md`. If the review never
-   ran, start M1 (Courses & Grade Calc) directly: core grade math in
-   `packages/core/src/grades/` (tests first), then Drizzle + better-sqlite3 in
-   `apps/desktop/src/main/db/`, then IPC channels, then the Grades screens. Ask the owner for
-   one real course syllabus to use as test data.
+1. **Fable review (on the owner's other Claude account).** The owner attaches
+   `fable-review-kit.md` (built with `pnpm fable-kit`) in a chat with Fable, and Fable writes
+   `fable-review.md`. The owner's steps are in `docs/prompts/README.md`.
+2. **Apply session (here).** The owner attaches `fable-review.md` and sends:
+   `Apply the attached Fable review by following docs/prompts/apply-review.md.`
+3. **Then M1: Courses & Grade Calc**, unless the review reshaped the roadmap. Build core grade
+   math in `packages/core/src/grades/` (tests first), then Drizzle + better-sqlite3 in
+   `apps/desktop/src/main/db/`, then the IPC channels, then the Grades screens. Ask the owner
+   for one real course syllabus to use as test data.
 
 ## Gotchas learned so far
 
