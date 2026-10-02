@@ -19,7 +19,16 @@ import type { Db } from '../../db/database';
 import { assignments, courses, gradeCategories } from '../../db/schema';
 
 /** Default course colors, used in turn. */
-const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const PALETTE = [
+  '#6366f1',
+  '#0ea5e9',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+  '#64748b',
+];
 
 const assignmentOrder = [
   sql`${assignments.dueAt} is null`,
@@ -159,6 +168,12 @@ export class GradesService {
     };
     this.db.insert(assignments).values(assignment).run();
     return assignment;
+  }
+
+  /** Adds several assignments in one transaction: all of them or none. */
+  createAssignments(inputs: z.output<typeof assignmentCreateSchema>[]): Assignment[] {
+    // better-sqlite3 has one connection, so everything inside runs in this transaction.
+    return this.db.transaction(() => inputs.map((input) => this.createAssignment(input)));
   }
 
   updateAssignment({ id, ...patch }: z.output<typeof assignmentUpdateSchema>): Assignment {

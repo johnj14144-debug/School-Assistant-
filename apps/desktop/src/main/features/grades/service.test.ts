@@ -119,6 +119,53 @@ describe('GradesService', () => {
     expect(detail.assignments[0]?.extraCredit).toBe(true);
   });
 
+  it('adds a pasted list all at once, or nothing if one item is invalid', () => {
+    const { service, course, category } = setup();
+    const c = course('History');
+    const other = course('Other');
+    const rrq = category(c.id, 'Reading responses', 20, 3);
+    const foreign = category(other.id, 'Elsewhere', 100);
+    const many = (items: object[]) =>
+      service.createAssignments(
+        items.map((item) => assignmentCreateSchema.parse({ courseId: c.id, ...item })),
+      );
+
+    const added = many([
+      { title: 'RRQ 1', categoryId: rrq.id, pointsPossible: 10 },
+      { title: 'RRQ 2', categoryId: rrq.id, pointsPossible: 10 },
+    ]);
+    expect(added.map((a) => a.title)).toEqual(['RRQ 1', 'RRQ 2']);
+
+    expect(() =>
+      many([
+        { title: 'RRQ 3', categoryId: rrq.id, pointsPossible: 10 },
+        { title: 'Bad', categoryId: foreign.id, pointsPossible: 10 },
+      ]),
+    ).toThrow(/different course/);
+    expect(service.getCourse(c.id).assignments.map((a) => a.title)).toEqual(['RRQ 1', 'RRQ 2']);
+  });
+
+  it('stores bonus categories and counts them in the grade', () => {
+    const { service, course, assignment } = setup();
+    const c = course('History');
+    const exams = service.createCategory(
+      categoryCreateSchema.parse({ courseId: c.id, name: 'Exams', weight: 100 }),
+    );
+    const extra = service.createCategory(
+      categoryCreateSchema.parse({
+        courseId: c.id,
+        name: 'Extra credit',
+        kind: 'bonus',
+        weight: 5,
+      }),
+    );
+    expect(exams.kind).toBe('regular');
+    expect(extra.kind).toBe('bonus');
+    assignment(c.id, { categoryId: exams.id, pointsPossible: 100, pointsEarned: 88 });
+    assignment(c.id, { categoryId: extra.id, pointsPossible: 5, pointsEarned: 4 });
+    expect(service.getCourse(c.id).grade).toMatchObject({ current: 92, warnings: [] });
+  });
+
   it('rejects a category from another course', () => {
     const { service, course, category, assignment } = setup();
     const a = course('A');

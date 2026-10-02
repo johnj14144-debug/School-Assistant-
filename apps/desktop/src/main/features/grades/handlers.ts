@@ -14,6 +14,7 @@ export function gradesHandlers(
     'category:update': (input) => grades.updateCategory(input),
     'category:delete': ({ id }) => grades.deleteCategory(id),
     'assignment:create': (input) => grades.createAssignment(input),
+    'assignment:create-many': (inputs) => grades.createAssignments(inputs),
     'assignment:update': (input) => grades.updateAssignment(input),
     'assignment:delete': ({ id }) => grades.deleteAssignment(id),
   };

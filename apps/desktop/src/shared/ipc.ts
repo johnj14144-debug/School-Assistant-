@@ -1,4 +1,5 @@
 import {
+  assignmentCreateManySchema,
   assignmentCreateSchema,
   assignmentSchema,
   assignmentUpdateSchema,
@@ -75,6 +76,10 @@ export const ipcContract = {
   'category:update': { input: categoryUpdateSchema, output: gradeCategorySchema },
   'category:delete': { input: byId, output: z.void() },
   'assignment:create': { input: assignmentCreateSchema, output: assignmentSchema },
+  'assignment:create-many': {
+    input: assignmentCreateManySchema,
+    output: z.array(assignmentSchema),
+  },
   'assignment:update': { input: assignmentUpdateSchema, output: assignmentSchema },
   'assignment:delete': { input: byId, output: z.void() },
 } as const;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { courseGradeSchema, gradingTypeSchema } from '../grades/course-grade';
+import { categoryKindSchema, courseGradeSchema, gradingTypeSchema } from '../grades/course-grade';
 import { DEFAULT_LETTER_SCALE, letterScaleSchema } from '../grades/letter';
 
 /** Domain objects for Grade Calc as stored by the app and passed over IPC. */
@@ -28,7 +28,9 @@ export const gradeCategorySchema = z.object({
   id: idSchema,
   courseId: idSchema,
   name: z.string(),
-  /** Percent of the course grade; ignored by points-based courses. */
+  /** 'bonus': points go straight onto the final grade, up to `weight` (see courseGrade). */
+  kind: categoryKindSchema,
+  /** Percent of the course grade (ignored by points-based courses); a bonus category's cap. */
   weight: z.number().min(0),
   dropLowest: z.number().int().min(0),
   position: z.number().int(),
@@ -93,12 +95,14 @@ export const courseUpdateSchema = courseFields.partial().extend({ id: idSchema }
 
 const categoryFields = z.object({
   name: z.string().trim().min(1).max(80),
+  kind: categoryKindSchema,
   weight: z.number().min(0).max(100),
   dropLowest: z.number().int().min(0).max(50),
 });
 
 export const categoryCreateSchema = categoryFields.extend({
   courseId: idSchema,
+  kind: categoryKindSchema.default('regular'),
   weight: categoryFields.shape.weight.default(0),
   dropLowest: categoryFields.shape.dropLowest.default(0),
 });
@@ -121,6 +125,8 @@ export const assignmentCreateSchema = assignmentFields.extend({
   extraCredit: z.boolean().default(false),
 });
 export const assignmentUpdateSchema = assignmentFields.partial().extend({ id: idSchema });
+/** Bulk add (pasted lists, numbered series), saved all or nothing. */
+export const assignmentCreateManySchema = z.array(assignmentCreateSchema).min(1).max(200);
 
 export type CourseCreate = z.input<typeof courseCreateSchema>;
 export type CourseUpdate = z.input<typeof courseUpdateSchema>;

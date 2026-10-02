@@ -14,16 +14,27 @@ import { z } from 'zod';
  * - **Extra credit**: earned points above possible count, and an `extraCredit` assignment adds
  *   its earned points without adding its possible points. It is never dropped. Ungraded extra
  *   credit counts at full value in the max and not at all in the min.
+ * - **Bonus categories** ("5 points of extra credit can be added to your final grade"): their
+ *   earned points are added straight onto the final percent, one point per percentage point, up
+ *   to the category's weight (the cap). They don't count toward the 100% of weights.
  */
 
 export const gradingTypeSchema = z.enum(['weighted', 'points']);
 export type GradingType = z.infer<typeof gradingTypeSchema>;
 
+export const categoryKindSchema = z.enum(['regular', 'bonus']);
+export type CategoryKind = z.infer<typeof categoryKindSchema>;
+
 export interface GradeCategoryInput {
   id: string;
-  /** Percent of the course grade (weighted courses only). */
+  /**
+   * Percent of the course grade (weighted courses only). For a bonus category: the most
+   * percentage points it can add to the final grade.
+   */
   weight: number;
   dropLowest: number;
+  /** Defaults to 'regular'. */
+  kind?: CategoryKind;
 }
 
 export interface GradeItem {
@@ -49,8 +60,12 @@ export type GradeWarning = z.infer<typeof gradeWarningSchema>;
 
 export const categoryGradeSchema = z.object({
   categoryId: z.string(),
+  kind: categoryKindSchema,
   weight: z.number(),
-  /** Percent over graded work, or null when nothing in the category is graded. */
+  /**
+   * Percent over graded work, or null when nothing in the category is graded. For a bonus
+   * category, current/max/min are the percentage points it adds to the final grade.
+   */
   current: z.number().nullable(),
   max: z.number(),
   min: z.number(),
@@ -159,6 +174,19 @@ function weightedAverage(parts: { weight: number; percent: number }[]): number |
   return clean(parts.reduce((sum, p) => sum + p.weight * p.percent, 0) / total);
 }
 
+/**
+ * Percentage points a bonus category adds in a scenario, capped at its weight. With nothing
+ * entered yet it is fully open, like a regular category: the whole cap in the max.
+ */
+function bonusPoints(items: GradeItem[], cap: number, scenario: Scenario): number {
+  if (items.length === 0) return scenario === 'max' ? cap : 0;
+  const earned = items.reduce((sum, a) => {
+    if (a.pointsEarned !== null) return sum + a.pointsEarned;
+    return scenario === 'max' ? sum + a.pointsPossible : sum;
+  }, 0);
+  return clean(Math.min(cap, earned));
+}
+
 /** Current, max and min percent for a course, with a per-category breakdown. */
 export function courseGrade(input: CourseGradeInput): CourseGrade {
   const categoryIds = new Set(input.categories.map((c) => c.id));
@@ -172,26 +200,52 @@ export function courseGrade(input: CourseGradeInput): CourseGrade {
     }
   }
 
-  const warnings: GradeWarning[] = [];
-  const categories = input.categories.map((c) => {
-    const items = byCategory.get(c.id) ?? [];
-    const current = pool(items, c.dropLowest, 'current');
-    const max = pool(items, c.dropLowest, 'max');
-    const min = pool(items, c.dropLowest, 'min');
-    return {
-      grade: {
+  const bonus = input.categories
+    .filter((c) => c.kind === 'bonus')
+    .map((c) => {
+      const items = byCategory.get(c.id) ?? [];
+      const anyGraded = items.some((a) => a.pointsEarned !== null);
+      return {
         categoryId: c.id,
+        kind: 'bonus' as const,
         weight: c.weight,
-        current: ratioPercent(current.earned, current.possible),
-        // A category with nothing entered is fully open.
-        max: ratioPercent(max.earned, max.possible) ?? 100,
-        min: ratioPercent(min.earned, min.possible) ?? 0,
-        dropped: current.dropped,
-      },
-      pools: { current, max, min },
-    };
-  });
+        current: anyGraded ? bonusPoints(items, c.weight, 'current') : null,
+        max: bonusPoints(items, c.weight, 'max'),
+        min: bonusPoints(items, c.weight, 'min'),
+        dropped: [],
+      };
+    });
+  const withBonus = (base: number, scenario: Scenario) =>
+    clean(bonus.reduce((sum, b) => sum + (b[scenario] ?? 0), base));
+
+  const warnings: GradeWarning[] = [];
+  const categories = input.categories
+    .filter((c) => c.kind !== 'bonus')
+    .map((c) => {
+      const items = byCategory.get(c.id) ?? [];
+      const current = pool(items, c.dropLowest, 'current');
+      const max = pool(items, c.dropLowest, 'max');
+      const min = pool(items, c.dropLowest, 'min');
+      return {
+        grade: {
+          categoryId: c.id,
+          kind: 'regular' as const,
+          weight: c.weight,
+          current: ratioPercent(current.earned, current.possible),
+          // A category with nothing entered is fully open.
+          max: ratioPercent(max.earned, max.possible) ?? 100,
+          min: ratioPercent(min.earned, min.possible) ?? 0,
+          dropped: current.dropped,
+        },
+        pools: { current, max, min },
+      };
+    });
   const dropped = categories.flatMap((c) => c.grade.dropped);
+  // Keep the caller's category order in the breakdown.
+  const order = new Map(input.categories.map((c, i) => [c.id, i]));
+  const breakdown = [...categories.map((c) => c.grade), ...bonus].sort(
+    (a, b) => (order.get(a.categoryId) ?? 0) - (order.get(b.categoryId) ?? 0),
+  );
 
   if (input.grading === 'points') {
     const totals = (scenario: Scenario) => {
@@ -207,18 +261,19 @@ export function courseGrade(input: CourseGradeInput): CourseGrade {
     const current = totals('current');
     const max = totals('max');
     const min = totals('min');
+    const currentPercent = ratioPercent(current.earned, current.possible);
     return {
-      current: ratioPercent(current.earned, current.possible),
-      max: ratioPercent(max.earned, max.possible) ?? 100,
-      min: ratioPercent(min.earned, min.possible) ?? 0,
-      categories: categories.map((c) => c.grade),
+      current: currentPercent === null ? null : withBonus(currentPercent, 'current'),
+      max: withBonus(ratioPercent(max.earned, max.possible) ?? 100, 'max'),
+      min: withBonus(ratioPercent(min.earned, min.possible) ?? 0, 'min'),
+      categories: breakdown,
       dropped,
       warnings,
     };
   }
 
-  const totalWeight = input.categories.reduce((sum, c) => sum + c.weight, 0);
-  if (input.categories.length > 0 && Math.abs(totalWeight - 100) > 1e-6) {
+  const totalWeight = categories.reduce((sum, c) => sum + c.grade.weight, 0);
+  if (categories.length > 0 && Math.abs(totalWeight - 100) > 1e-6) {
     warnings.push({ code: 'weights_not_100', total: clean(totalWeight) });
   }
   if (uncategorized.length > 0) {
@@ -228,15 +283,14 @@ export function courseGrade(input: CourseGradeInput): CourseGrade {
   const graded = categories.flatMap(({ grade }) =>
     grade.current === null ? [] : [{ weight: grade.weight, percent: grade.current }],
   );
+  const current = weightedAverage(graded);
+  const scenario = (key: 'max' | 'min') =>
+    weightedAverage(categories.map((c) => ({ weight: c.grade.weight, percent: c.grade[key] })));
   return {
-    current: weightedAverage(graded),
-    max:
-      weightedAverage(categories.map((c) => ({ weight: c.grade.weight, percent: c.grade.max }))) ??
-      100,
-    min:
-      weightedAverage(categories.map((c) => ({ weight: c.grade.weight, percent: c.grade.min }))) ??
-      0,
-    categories: categories.map((c) => c.grade),
+    current: current === null ? null : withBonus(current, 'current'),
+    max: withBonus(scenario('max') ?? 100, 'max'),
+    min: withBonus(scenario('min') ?? 0, 'min'),
+    categories: breakdown,
     dropped,
     warnings,
   };

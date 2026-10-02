@@ -2,7 +2,7 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-02 (session 3: M1 done, spike recorded)_
+_Last updated: 2026-10-02 (session 3: M1 done; M2 in progress)_
 
 ## Where things stand
 
@@ -28,16 +28,37 @@ _Last updated: 2026-10-02 (session 3: M1 done, spike recorded)_
   math); a corrupt DB file shows the error screen and stays byte-identical.
 - The owner ran `scripts/claude-cli-spike.ps1` on the laptop; every run succeeded.
 
-## Next session: M2 — Courses & Grade Calc screens
+## In progress: M2 — Courses & Grade Calc screens
 
-Build the real Grades screens on the existing IPC channels: course list with overview cards
-(current / max / min + letter via `letterFor` and the course's scale), course create/edit form
-(term, code, color, letter scale, grading type), categories with weights (show the
-`weights_not_100` warning), assignments table with fast keyboard entry and bulk paste
-("HW 1, 10/7, 20 pts"; parse in core with tests; due dates entered in local time and stored as
-UTC). Remove `GradesDebugList` and `sampleCourse.ts` when the real screens land. Ask the owner
-for one real UH syllabus first (it's the M2 acceptance test), and ask them to run the CLI
-spike if they haven't.
+Done so far (committed, `pnpm check` green, create-course flow checked headless):
+- Core: **bonus categories** (`kind: 'bonus'`): points go straight onto the final grade, up to
+  the category's weight (the cap). This follows the owner's HIST 4318 syllabus ("5 points extra
+  credit can be added to your final grade"), which is now a core test case. Not counted in the
+  100% of weights; empty = fully open (whole cap in the max).
+- Core: `parseAssignmentLines` for bulk paste ("HW 1, 10/7, 20 pts", "Quiz 1, 9/1, 8/10 pts",
+  dates/times/categories/EC in any order; due dates come back as local parts).
+- DB migration `0001_category_kind` (hand-fixed, see gotchas), `assignment:create-many`
+  (one transaction), service palette = the form's 8 colors.
+- Renderer: `lib/dates.ts` (local date input ↔ UTC, tested across DST in America/Chicago),
+  `lib/useIpc.ts`, `components/EditableCell.tsx`, `CourseForm` (name, code, term guessed
+  from the date, grading type, color, letter scale presets + cutoff editor), Grades overview
+  (cards grouped by term), `/grades/new`, and a basic `/grades/:courseId` page (summary,
+  edit, delete; categories and assignments listed read-only). The debug list is gone.
+
+## Next session: finish M2
+
+1. Course page editing: categories table (name, regular/bonus, weight or cap, drop lowest,
+   category grade, delete, add row; total-weight check) and assignments table (inline
+   `EditableCell`s, category select, date cell that saves on blur, earned / possible, %,
+   "dropped" tag from `grade.dropped`, EC checkbox, delete; add row where Enter adds and keeps
+   category/points; Enter in an earned cell moves to the next row; filter by category).
+2. "Paste a list" panel (textarea → `parseAssignmentLines` preview with errors → default
+   category → `assignment:create-many`) and "Add a numbered series" (name, count, points,
+   category, first due date, every N days).
+3. Headless run entering HIST 4318 from the syllabus (6 categories + bonus, 8 video quizzes,
+   13 reading responses with drop 3) to check the AC: under 5 minutes, correct current and max.
+4. Docs: VISION "Grade Calc" bonus rule; ARCHITECTURE grade math + data model (`kind`);
+   ROADMAP ticks; this file.
 
 ## Gotchas learned so far
 
@@ -45,6 +66,12 @@ spike if they haven't.
   if the package is allowed to build. It is a no-op when a prebuild exists, but on Windows it
   would need Visual Studio. better-sqlite3 is therefore in `ignoredBuiltDependencies` in
   `pnpm-workspace.yaml`; the prebuilt `prebuilds/<platform>.node` loads without it.
+- **Review every drizzle-kit migration before committing.** For SQLite it rebuilds a table to
+  add a column with a CHECK, and its `INSERT … SELECT` copied the *new* column from the old
+  table (`no such column`), so `0001` always failed until hand-fixed. The upgrade test in
+  `database.test.ts` (populated v1 → latest) catches this; extend it for each migration.
+- Renderer unit tests (`src/renderer/src/**/*.test.ts`) run in Node and are typechecked by
+  `tsconfig.node.json`; `tsconfig.web.json` excludes them.
 - **Migrations:** after editing `src/main/db/schema.ts` run
   `pnpm --filter @sa/desktop db:generate` and commit the SQL file and `meta/`. Never edit or
   regenerate a migration once the owner has run it (from now on, `0000_init` is frozen). Biome

@@ -45,12 +45,16 @@ export const gradeCategories = sqliteTable(
       .notNull()
       .references(() => courses.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    kind: text('kind', { enum: ['regular', 'bonus'] })
+      .notNull()
+      .default('regular'),
     weight: real('weight').notNull().default(0),
     dropLowest: integer('drop_lowest').notNull().default(0),
     position: integer('position').notNull(),
   },
   (t) => [
     index('grade_category_course_idx').on(t.courseId),
+    check('grade_category_kind', sql`${t.kind} in ('regular', 'bonus')`),
     check('grade_category_weight', sql`${t.weight} >= 0`),
     check('grade_category_drop_lowest', sql`${t.dropLowest} >= 0`),
   ],

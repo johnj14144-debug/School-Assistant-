@@ -3,7 +3,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router';
 import type { IpcOutput } from '../../shared/ipc';
 import { StartupError } from './components/StartupError';
 import { cn } from './lib/cn';
-import { type AppRoute, routes } from './routes';
+import { type AppRoute, pageRoutes, routes } from './routes';
 
 function SidebarLink({ path, label, icon: Icon }: AppRoute) {
   return (
@@ -58,7 +58,7 @@ export function App() {
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/today" replace />} />
-          {routes.map(({ path, element }) => (
+          {[...routes, ...pageRoutes].map(({ path, element }) => (
             <Route key={path} path={path} element={element} />
           ))}
         </Routes>

@@ -134,3 +134,35 @@ describe('openDatabase', () => {
     expect(() => openDatabase(file)).toThrow();
   });
 });
+
+describe('migration 0001 (category kind)', () => {
+  it('upgrades a v1 database with data, keeping categories and links', () => {
+    const file = tempFile();
+    const v1 = new Database(file);
+    migrate(v1, migrations.slice(0, 1));
+    v1.exec(`
+      insert into course values ('c1', 'Calc', '', '', 'enrolled', 'weighted', '[]', '#6366f1', 'x', 'x');
+      insert into grade_category values ('g1', 'c1', 'Homework', 40, 1, 0);
+      insert into assignment values ('a1', 'c1', 'g1', 'HW 1', null, 10, 9, 0, 'x', 'x');
+    `);
+    v1.close();
+
+    const upgraded = openDatabase(file);
+    const { sqlite } = upgraded;
+    expect(
+      sqlite.prepare('select id, name, kind, weight, drop_lowest from grade_category').all(),
+    ).toEqual([{ id: 'g1', name: 'Homework', kind: 'regular', weight: 40, drop_lowest: 1 }]);
+    expect(sqlite.prepare('select category_id from assignment').get()).toEqual({
+      category_id: 'g1',
+    });
+    // The rebuilt table keeps its checks and the assignment foreign key still points at it.
+    expect(() =>
+      sqlite.exec("insert into grade_category values ('g2', 'c1', 'X', 'weird', 1, 0, 1)"),
+    ).toThrow(/CHECK/);
+    sqlite.exec("delete from grade_category where id = 'g1'");
+    expect(sqlite.prepare('select category_id from assignment').get()).toEqual({
+      category_id: null,
+    });
+    upgraded.close();
+  });
+});

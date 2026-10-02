@@ -11,7 +11,9 @@ import {
 import type { ReactElement } from 'react';
 import { CalendarPage } from './features/calendar/CalendarPage';
 import { CoachPage } from './features/coach/CoachPage';
+import { CoursePage } from './features/grades/CoursePage';
 import { GradesPage } from './features/grades/GradesPage';
+import { NewCoursePage } from './features/grades/NewCoursePage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { TasksPage } from './features/tasks/TasksPage';
@@ -34,4 +36,10 @@ export const routes: AppRoute[] = [
   { path: '/coach', label: 'Coach', icon: Compass, element: <CoachPage /> },
   { path: '/reports', label: 'Reports', icon: FileText, element: <ReportsPage /> },
   { path: '/settings', label: 'Settings', icon: Settings, element: <SettingsPage />, footer: true },
+];
+
+/** Pages reached from inside other pages (no sidebar entry). */
+export const pageRoutes: { path: string; element: ReactElement }[] = [
+  { path: '/grades/new', element: <NewCoursePage /> },
+  { path: '/grades/:courseId', element: <CoursePage /> },
 ];

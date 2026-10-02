@@ -21,6 +21,11 @@ function cat(id: string, weight: number, dropLowest = 0): GradeCategoryInput {
   return { id, weight, dropLowest };
 }
 
+/** A category whose points go straight onto the final grade, up to `cap`. */
+function bonusCat(id: string, cap: number): GradeCategoryInput {
+  return { id, weight: cap, dropLowest: 0, kind: 'bonus' };
+}
+
 function weighted(categories: GradeCategoryInput[], assignments: GradeItem[]): CourseGradeInput {
   return { grading: 'weighted', categories, assignments };
 }
@@ -251,6 +256,113 @@ describe('courseGrade: extra credit', () => {
   it('can push the max above 100', () => {
     const result = courseGrade(points([item(null, 100, null), item(null, 10, null, true)]));
     expect(result.max).toBe(110);
+  });
+});
+
+describe('courseGrade: bonus categories (points onto the final grade)', () => {
+  it('adds earned points straight onto the final percent', () => {
+    const result = courseGrade(
+      weighted([cat('exams', 100), bonusCat('ec', 5)], [item('exams', 100, 80), item('ec', 5, 3)]),
+    );
+    expect(result.current).toBe(83);
+    expect(result.max).toBe(83);
+    expect(result.min).toBe(83);
+  });
+
+  it('caps the bonus at the category weight', () => {
+    const result = courseGrade(
+      weighted(
+        [cat('exams', 100), bonusCat('ec', 5)],
+        [item('exams', 100, 90), item('ec', 5, 5), item('ec', 5, 4), item('ec', 3, null)],
+      ),
+    );
+    expect(result.current).toBe(95);
+    expect(result.max).toBe(95);
+    expect(result.categories.find((c) => c.categoryId === 'ec')).toMatchObject({
+      kind: 'bonus',
+      current: 5,
+      max: 5,
+      min: 5,
+    });
+  });
+
+  it('counts ungraded bonus work in the max only', () => {
+    const result = courseGrade(
+      weighted(
+        [cat('exams', 100), bonusCat('ec', 5)],
+        [item('exams', 100, 80), item('ec', 5, null)],
+      ),
+    );
+    expect(result.current).toBe(80);
+    expect(result.max).toBe(85);
+    expect(result.min).toBe(80);
+    expect(result.categories[1]?.current).toBeNull();
+  });
+
+  it('is left out of the weight total, and fully open while empty', () => {
+    const result = courseGrade(weighted([cat('exams', 100), bonusCat('ec', 5)], []));
+    expect(result.warnings).toEqual([]);
+    expect(result.max).toBe(105);
+  });
+
+  it('does not create a current grade on its own', () => {
+    const result = courseGrade(
+      weighted(
+        [cat('exams', 100), bonusCat('ec', 5)],
+        [item('exams', 100, null), item('ec', 5, 5)],
+      ),
+    );
+    expect(result.current).toBeNull();
+  });
+
+  it('works in points-based courses', () => {
+    const result = courseGrade(
+      points([item(null, 200, 150), item('ec', 2, 2)], [bonusCat('ec', 3)]),
+    );
+    expect(result.current).toBe(77);
+  });
+});
+
+describe('courseGrade: real syllabus (HIST 4318, Fall 2026)', () => {
+  // Grading from the syllabus: attendance 10%, 8 video quizzes 16%, 13 reading responses 20%
+  // (lowest 3 dropped), midterm 20%, in-class essay 14%, final 20%, and up to 5 points of extra
+  // credit added to the final grade. Scores are made up, as of week 6.
+  const categories = [
+    cat('attendance', 10),
+    cat('video', 16),
+    cat('rrq', 20, 3),
+    cat('midterm', 20),
+    cat('essay', 14),
+    cat('final', 20),
+    bonusCat('extra', 5),
+  ];
+  const videoScores = [10, 9, 8, 10, 7, null, null, null];
+  const rrqScores = [10, 8, 0, 9, 10, 7, null, null, null, null, null, null, null];
+  const assignments = [
+    item('attendance', 10, null),
+    ...videoScores.map((score) => item('video', 10, score)),
+    ...rrqScores.map((score) => item('rrq', 10, score)),
+    item('midterm', 100, null),
+    item('essay', 100, null),
+    item('final', 100, null),
+    item('extra', 5, null),
+    item('extra', 5, null),
+    item('extra', 3, null),
+  ];
+  const result = courseGrade(weighted(categories, assignments));
+
+  it('computes the current grade from graded categories, dropping the 3 worst responses', () => {
+    // Video quizzes 44/50 = 88%; responses keep 10, 9, 10 → 29/30.
+    expect(result.current).toBeCloseTo((16 * 88 + 20 * ((29 * 100) / 30)) / 36, 9);
+    expect(result.dropped).toHaveLength(3);
+  });
+
+  it('computes the best and worst final grades still possible', () => {
+    // Best: video 74/80, responses 99/100 after drops, everything else 100%, plus 5 bonus.
+    expect(result.max).toBeCloseTo(98.6 + 5, 9);
+    // Worst: video 44/80, responses 44/100 after dropping three zeros, everything else 0.
+    expect(result.min).toBeCloseTo(17.6, 9);
+    expect(result.warnings).toEqual([]);
   });
 });
 

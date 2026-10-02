@@ -27,6 +27,15 @@ export const DEFAULT_LETTER_SCALE: LetterScale = [
   { letter: 'F', minPercent: 0 },
 ];
 
+/** Plain scale without plus/minus, used by some courses. */
+export const PLAIN_LETTER_SCALE: LetterScale = [
+  { letter: 'A', minPercent: 90 },
+  { letter: 'B', minPercent: 80 },
+  { letter: 'C', minPercent: 70 },
+  { letter: 'D', minPercent: 60 },
+  { letter: 'F', minPercent: 0 },
+];
+
 /** Percent earned (0–100+), or null when nothing has been graded yet. */
 export function percent(earned: number, possible: number): number | null {
   if (possible <= 0) return null;
