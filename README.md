@@ -5,13 +5,15 @@ through Telegram, powered by your own Claude subscription.
 
 - **Planner**: time-blocks your whole week from deadlines and re-plans live as your day changes.
   A task timer learns how long things really take you.
-- **Life Coach**: researches your big goals in depth and builds full college-style courses for
-  them, with homework, placement tests and practice exams, taught the way you learn best.
-  Also a Sunday research report on competitions and opportunities.
+- **Life Coach**: researches your big goals in depth and builds a plan that gets you there: a
+  roadmap of the best textbooks, projects and competitions, honest warnings when the timeline is
+  tough, and a check that every step really helps the goal. Courses follow real textbooks, with
+  homework, placement tests and practice exams, and everything breaks down into tasks on your
+  calendar. Also a weekly research report on competitions and opportunities.
 - **Grade Calc**: every grade in every course, your current grade, and the best grade still
   possible.
 
-> Status: **foundation built (M0)**. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
+> Status: **foundation built (M0)**; the first outside review is applied. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
 > [docs/STATUS.md](docs/STATUS.md) for the latest handoff note.
 
 ## Set up on your Windows laptop
@@ -32,7 +34,7 @@ through Telegram, powered by your own Claude subscription.
    The first `pnpm dev` downloads Electron, which takes a minute.
 
 Later milestones will need a Telegram account plus a bot token from @BotFather, and a free
-Cloudflare account (M8). The roadmap explains each step when it's needed.
+Cloudflare account (M14). The roadmap explains each step when it's needed.
 
 ## Working on it with Claude Code
 

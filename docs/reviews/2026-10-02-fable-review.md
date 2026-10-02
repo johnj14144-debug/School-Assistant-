@@ -1614,3 +1614,161 @@ Replace with:
 - Nothing in this review researches the owner's specific goals (exam formats, which C++ book,
   etc.). That is the coach's job at runtime; the review only shapes the pipeline that will do
   it.
+
+---
+
+## Owner answers (2026-10-02)
+
+Recorded in `docs/VISION.md` → "Decisions log".
+
+- **Q1:** recommended. Planner core → Claude bridge → Life Coach → Phone.
+- **Q2:** recommended. A folder the owner picks in Settings; Documents by default.
+- **Q3:** option 2. Staged research; usage credits only when the owner says so for a specific
+  run.
+- **Q4:** option 3, with a clarification from the owner: "Any book no matter the cost. Should
+  use the best one. Money should not be a factor involved in the decision making." No free-first
+  rule, no approval step for paid books.
+- **Q5:** recommended. `add:` quick capture with zero tokens.
+- **Q6:** recommended. Fixed events stay on Houston time.
+- **"Reality check":** the owner redefined it: "There should be a reality check about if I
+  complete the goal X could happen but not about if I could reach the goal. For example lets say
+  I want to become an Olympian and have 4.5min mile it should create a plan to get me there give
+  warnings about feasibility but ultimately make the plan. The real reality check should be if I
+  win X competition would it help with goal Y." Applied as: plan for the goal as stated,
+  feasibility warnings (never a lower target), and an impact check on every roadmap item.
+- **Pitches P1–P9:** all declined. They are recorded in `docs/IDEAS.md`.
+
+## Verification results
+
+Checked 2026-10-02 against primary sources.
+
+- **D1 — confirmed.** The headless docs (https://code.claude.com/docs/en/headless) still say
+  `--bare` "will become the default for `-p` in a future release". They also say: "In bare mode,
+  Claude Code never reads OAuth credentials or the system keychain". The CLI reference has no
+  `--no-bare` flag yet, so the flag table in M9 stays the plan.
+- **D2 — confirmed.** The docs give these minimum versions:
+  - `--permission-prompts` requires v2.1.259
+  - invalid `--json-schema` errors since v2.1.205
+  - the Windows unreadable-stdin crash was fixed in v2.1.211
+  - `--resume <id>` works from any directory since v2.1.223
+
+  The minimum stays 2.1.259. Also: SIGTERM exits 143 and leaves the turn unfinished, and SIGINT
+  ends the turn.
+- **D3 — partly confirmed.**
+  - Confirmed (headless docs): `stream-json` emits `system/api_retry` with `error: "rate_limit"`.
+  - Confirmed (https://code.claude.com/docs/en/errors): the limit messages are
+    - "You've hit your session limit · resets 3:45pm"
+    - "… weekly limit · resets Mon 12:00am"
+    - "… Opus limit …"
+    - "… Sonnet limit …"
+  - Model-specific limits therefore exist.
+  - Not documented: the exact `-p --output-format json` shape of a limit hit.
+
+  Kept as a single regex table, with the real shape recorded from a run (M1 spike / M9). Added
+  the model-specific messages and the Opus→Sonnet fallback to ARCHITECTURE.
+- **D4 — partly confirmed.**
+  - `--setting-sources` exists: "Comma-separated list of setting sources to load (`user`,
+    `project`, `local`)". The docs don't discuss its effect on login.
+  - The docs confirm that `-p` without `--bare` runs a folder's hooks and `.mcp.json` servers
+    "even in a folder you've never trusted".
+  - New options found: `--safe-mode` disables CLAUDE.md, skills, plugins, hooks and MCP servers
+    while "Authentication, model selection, built-in tools, and permissions work normally". There
+    is also `--strict-mcp-config`.
+  - **Adaptation:** the M1 spike now tests `--setting-sources user`. ARCHITECTURE lists
+    `--setting-sources`, `--strict-mcp-config` and `--safe-mode` as candidates to test.
+  - **New finding (support article "Use Claude Code with your Pro or Max plan"):** an
+    `ANTHROPIC_API_KEY` in the environment takes precedence over the subscription and bills API
+    usage. **Adaptation:** the runner strips it from the child environment (ARCHITECTURE, M9,
+    CLAUDE.md).
+- **D5 — not confirmed by an official page.**
+  - Confirmed by the support articles: Pro has a 5-hour session limit and a weekly limit that
+    "applies across all models". The weekly limit resets at a fixed time assigned to the
+    account, and usage is shared between Claude and Claude Code.
+  - Not confirmed: whether Opus is included on Pro in Claude Code. No official page says so.
+    Third-party pages say it is in 2026.
+  - **Adaptation:** model aliases stay configurable, and synthesis falls back to `sonnet`. The
+    M1 spike now runs once with `--model opus`.
+- **D6 — confirmed, with a watch item.**
+  - The legal page (https://code.claude.com/docs/en/legal-and-compliance) says "Advertised usage
+    limits for Pro and Max plans assume ordinary, individual usage of Claude Code and the Agent
+    SDK". It also says that nothing in the restrictions prevents "an end user from signing in to
+    the unmodified Claude Code binary with their own Claude subscription".
+  - The restriction applies to developers routing *other users'* requests through plan
+    credentials, which isn't this app.
+  - Usage credits are available on Pro and apply to Claude Code. They are billed at API rates,
+    are opt-in, and have a monthly cap (support article "Manage usage credits").
+  - **Watch item:** the support article "Use the Claude Agent SDK with your Claude plan" says a
+    change announced for `claude -p` / Agent SDK usage was paused on 2026-06-15. That change
+    would have moved `-p` usage to a separate monthly credit ($20 on Pro). For now, "Claude Agent
+    SDK, `claude -p`, and third-party app usage still draw from your subscription's usage
+    limits."
+  - Recorded in STATUS; re-check before M9.
+- **D7 — confirmed.**
+  - better-sqlite3 13.0.3 (the latest) depends on `node-addon-api` and has `gypfile: false`.
+  - It has no install script, and the package contains `prebuilds/win32-x64.node` (plus other
+    platforms).
+  - 13.0.0–13.0.1 still ran `node-gyp rebuild`.
+  - **Adaptation:** M1 requires ≥ 13.0.2. `npmRebuild: false` is correct.
+- **D8 — confirmed.** Cloudflare's Workers limits page: cron triggers are allowed on the free
+  plan (5 per account), with 100,000 requests/day and 10 ms CPU per request. D1 free: 5 million
+  rows read/day, 100,000 rows written/day, 5 GB storage. A 1-minute cron uses 1,440
+  invocations/day.
+- **D9 — confirmed.** Telegram Bot API `setWebhook`: `secret_token` is "A secret token to be
+  sent in a header 'X-Telegram-Bot-Api-Secret-Token' in every webhook request, 1-256
+  characters."
+
+## Apply log
+
+- **C1 — applied.** `$13` → `$20` in `docs/prompts/README.md`.
+- **C2 — adapted.** VISION rewritten from Fable's draft, with these changes:
+  - book choice on quality alone, money never a factor (Q4)
+  - the reality check replaced by "plan for the stated goal + feasibility warnings + impact
+    check"
+  - textbook progress, monthly checkpoints, sick-day mode and the pre-run estimate removed
+    (pitches declined)
+  - usage credits only per run when the owner says so (Q3)
+  - a "Decisions log" added
+- **C3 — adapted.**
+  - ADR 0006: rules 2–4 rewritten for the owner's goal and impact rules; book policy changed to
+    quality only; checkpoints removed.
+  - ADR 0007: applied as written (Q6 recommended).
+  - Both added to the ADR index.
+- **C4 — adapted.** ARCHITECTURE rewritten from Fable's draft:
+  - coach stages: the reality check was replaced by a roadmap stage with core feasibility math
+    and an impact-check stage, and the checkpoint stage was dropped
+  - data model: `targetLevel`, `cost`/`isFree` and `evidence[]` dropped; `Roadmap.feasibility`
+    and `Milestone.impact` added
+  - sick-day re-plan removed
+  - Claude bridge: added `ANTHROPIC_API_KEY` stripping, the limit-message table, the Opus
+    fallback, the usage-credits flow and the setting-isolation candidates (D3–D6); the pre-run
+    estimate was removed
+- **C5 — adapted.** ROADMAP from Fable's draft, with these changes:
+  - M0 line updated
+  - M1: better-sqlite3 ≥ 13.0.2; spike also tests `--model opus` and `--setting-sources`
+  - M6: sick-day mode removed
+  - M9: env stripping and usage-credits choice added
+  - M11: reality check and estimate removed
+  - M12: feasibility and impact-check items and AC added (the 4:30 mile fixture)
+  - M15: "sick-day mode" wording removed
+  - M16: checkpoint and hours-by-goal removed
+- **C6 — adapted.** STATUS based on Fable's draft, plus:
+  - session-2 summary and owner decisions
+  - better-sqlite3 version gotcha
+  - the hash-routing gotcha from the C8 smoke test
+  - `ANTHROPIC_API_KEY` and the paused `-p` credit change as watch items
+  - plain-language spike steps requested for the owner
+- **C7 — adapted.** CLAUDE.md:
+  - all five edits applied
+  - the coach rule rewritten for the owner's answers (goal as stated, impact check, quality-only
+    materials)
+  - the Claude rule mentions stripping `ANTHROPIC_API_KEY`
+- **C8–C12 — applied** earlier in this session from the owner's patch (`git apply`, identical to
+  section 5). `pnpm check`, `pnpm build` and a headless Electron smoke test all passed.
+- **C13 — applied.** Two rows added to IDEAS; the "Automatic roadmap re-planning" reason is
+  reworded because P4 was declined. A "Declined in the first review" table records P1–P9.
+- **Extra (missed by the review) — applied.** Stale milestone numbers updated:
+  - placeholder pages: Grades M2, Tasks M3, Calendar M4–M5, Coach M11–M13, Reports M16,
+    Settings M1+
+  - the Coach page blurb no longer says "full college-style courses"
+  - README coach blurb and relay milestone (M14)
+  - the milestone pointer in ADR 0004 (decision unchanged)

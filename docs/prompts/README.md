@@ -26,7 +26,7 @@ To make a fresh one later, start a session here and ask: `Make me a new Fable ki
 4. If you see a setting for maximum length ("max tokens"), set it to the highest number.
 5. If Fable stops before it's finished, reply `continue`.
 
-**Optional second pass.** This uses more of your $13 and catches Fable's own mistakes. When
+**Optional second pass.** This uses more of your $20 and catches Fable's own mistakes. When
 Fable is done, send:
 
 ```text

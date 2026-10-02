@@ -5,7 +5,7 @@ export function GradesPage() {
     <PlaceholderPage
       title="Grades"
       description="Every course and assignment, your current grade, and the best grade still possible."
-      milestone="M1"
+      milestone="M2"
     />
   );
 }

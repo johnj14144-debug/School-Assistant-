@@ -15,7 +15,7 @@ export function SettingsPage() {
     <PlaceholderPage
       title="Settings"
       description="Sleep floor, routine, phone pairing, Claude usage and backups."
-      milestone="M6+"
+      milestone="M1+"
     >
       <dl className="mt-8 grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
         <dt className="text-zinc-500">Version</dt>

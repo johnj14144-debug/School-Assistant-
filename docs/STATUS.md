@@ -2,37 +2,32 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-02 (session 2: applied Fable review changes C8–C12)_
+_Last updated: 2026-10-02 (session 2: Fable review applied)_
 
 ## Where things stand
 
-- **M0 Foundation is done.** The app builds and launches into the sidebar shell, the IPC
-  round-trip works (Settings shows version, platform and data folder), and lint, typecheck and
-  tests are green.
-- **Fable review changes C8–C12 are applied** (the owner sent them as a ready-made patch for
-  `0521084`, applied with `git apply`):
-  - Window hardening: `src/main/security.ts` (pure, unit-tested URL policy). Only
-    http/https/mailto links go to `shell.openExternal`; `will-navigate` keeps the window on the
-    dev server origin or the `file://` bundle; all web permission requests are denied; the
-    packaged app has no menu (so no DevTools/reload shortcuts).
-  - IPC handlers are typed with the *parsed* input (`IpcParsedInput`, zod defaults applied).
-  - electron-builder: `npmRebuild: false` (better-sqlite3 uses N-API prebuilds), `*.node`
-    unpacked from the asar, `publish: null`.
-  - CI jobs time out after 20 minutes; `tsconfig.web.json` no longer lists the nonexistent
-    `src/preload/index.d.ts`.
+- **M0 Foundation is done** and the Fable review is applied
+  (`docs/reviews/2026-10-02-fable-review.md`, with "Verification results" and "Apply log" at
+  the end):
+  - VISION/ARCHITECTURE/ROADMAP were rewritten around the real Life Coach (ADR 0006) and the
+    owner's answers (VISION "Decisions log"). The roadmap is re-cut into one-session
+    milestones: planner core → Claude bridge → coach → phone.
+  - The time rule changed: instants in UTC, recurring fixed events in local time + zone,
+    Houston by default (ADR 0007).
+  - The window URL policy is enforced (`src/main/security.ts`), IPC handlers get the parsed
+    input type, the installer config skips native rebuilds, and CI jobs time out after 20 min.
 - Nothing is stored yet: there is no database and no real features.
+- Rejected pitches (all nine) are in `docs/IDEAS.md` with the owner's reasons.
 
-## Next session: rest of the Fable review, then M1
+## Next session: M1 — Database, backups, log, grade math
 
-1. **The rest of the review was not attached.** Only the C8–C12 patch came in this session, so
-   the summary, decisions (Q#), pitches (P#), changes C1–C7, any changes after C12, and the
-   fact checks (D#) are still to do. The owner attaches `fable-review.md` and sends:
-   `Apply the attached Fable review by following docs/prompts/apply-review.md.`
-   C8–C12 are already in `main`: log them as "applied (from patch)" and skip them.
-2. **Then M1: Courses & Grade Calc**, unless the review reshaped the roadmap. Build core grade
-   math in `packages/core/src/grades/` (tests first), then Drizzle + better-sqlite3 in
-   `apps/desktop/src/main/db/`, then the IPC channels, then the Grades screens. Ask the owner
-   for one real course syllabus to use as test data.
+Build in this order: `electron-log` + `src/main/log.ts`; better-sqlite3 (≥ 13.0.2) + Drizzle in
+`src/main/db/` (WAL, migrations, `Setting` table); the daily `VACUUM INTO` backup with a folder
+setting and picker; core grade math in `packages/core/src/grades/` (tests first);
+Course/Category/Assignment tables and IPC channels. Ask the owner to run the **Claude CLI
+spike** from the M1 checklist on their laptop (give them exact copy-paste steps for
+PowerShell; they have no coding experience) and paste the output; record the results here.
+Ask for one real UH syllabus to use as test data for M2.
 
 ## Gotchas learned so far
 
@@ -45,10 +40,13 @@ _Last updated: 2026-10-02 (session 2: applied Fable review changes C8–C12)_
   `paths` are relative to the tsconfig.
 - **Biome 2.5**: rules are enabled with `"preset": "recommended"`. (`biome migrate` rewrote it to
   `"none"` once, which silently disables linting, so double-check after migrating.)
-- **better-sqlite3 13** ships N-API prebuilt binaries (including win32-x64) inside the package.
-  The spike confirmed it loads under Node 22 and Electron 44 (Node 24.21, ABI 149) with no
-  compiler. `node:sqlite` also works in Electron 44, but Drizzle 0.45 has no driver for it, so
-  the choice is better-sqlite3 (ADR 0005).
+- **better-sqlite3 13** ships N-API prebuilt binaries (including `prebuilds/win32-x64.node`)
+  inside the package. 13.0.2+ has no install script (13.0.0–13.0.1 ran `node-gyp rebuild`), so
+  require ≥ 13.0.2. The spike confirmed it loads under Node 22 and Electron 44 (Node 24.21,
+  ABI 149) with no compiler. `node:sqlite` also works in Electron 44, but Drizzle 0.45 has no
+  driver for it, so the choice is better-sqlite3 (ADR 0005). `electron-builder.yml` has
+  `npmRebuild: false` for this reason; confirm on the first `dist` (M8) that the `.node` file
+  is unpacked and loads.
 - `@sa/core` is a source-only workspace package (`exports` → `src/index.ts`). It must stay in
   the desktop app's **devDependencies** so electron-vite bundles it instead of externalizing it.
 - pnpm prints an "Ignored build scripts: electron-winstaller" warning. It's harmless (Squirrel
@@ -59,8 +57,19 @@ _Last updated: 2026-10-02 (session 2: applied Fable review changes C8–C12)_
 - Headless checks in cloud sessions: run Electron under `Xvfb :99` with `--no-sandbox
   --disable-gpu`. Playwright's `_electron` works (global Playwright at
   `/opt/node-tools/node_modules/playwright` in the cloud image).
+- **Claude CLI facts (docs, checked 2026-10-02):** `--bare` never reads the subscription login
+  and is announced to become the default for `-p`; `--permission-prompts none` needs v2.1.259+;
+  prompts go through stdin (argv is limited on Windows; stdin capped at 10 MB); `-p` without
+  `--bare` loads `~/.claude` settings, hooks and MCP servers and any `CLAUDE.md` in the working
+  folder; an `ANTHROPIC_API_KEY` in the environment overrides the subscription login, so the
+  runner must strip it. See ARCHITECTURE "Claude bridge".
+- **Claude plan watch item:** Anthropic announced, then paused (2026-06-15), a change that would
+  move `claude -p` usage off the plan limits onto a separate monthly Agent SDK credit ($20 on
+  Pro). Today `-p` still uses the plan limits. Re-check the support article "Use the Claude
+  Agent SDK with your Claude plan" before M9.
+- **Time:** instants in UTC; recurring fixed events in local time + IANA zone (ADR 0007).
 
 ## Open questions for the user
 
-- Please attach the full `fable-review.md` so the rest of the review can be applied.
-- For M1, get a real UH syllabus to test with.
+- Result of the Claude CLI spike (M1 checklist). Not blocking for M1's code.
+- One real UH syllabus for M2 test data.
