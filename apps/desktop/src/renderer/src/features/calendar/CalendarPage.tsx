@@ -5,7 +5,7 @@ export function CalendarPage() {
     <PlaceholderPage
       title="Calendar"
       description="Your whole week, time-blocked automatically around classes, meals and 7.5 hours of protected sleep."
-      milestone="M3–M4"
+      milestone="M4–M5"
     />
   );
 }

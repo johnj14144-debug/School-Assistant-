@@ -19,7 +19,10 @@ export const ipcContract = {
 
 export type IpcContract = typeof ipcContract;
 export type IpcChannel = keyof IpcContract;
+/** What the renderer passes in (before validation). */
 export type IpcInput<C extends IpcChannel> = z.input<IpcContract[C]['input']>;
+/** What a main-process handler receives (after validation, defaults applied). */
+export type IpcParsedInput<C extends IpcChannel> = z.output<IpcContract[C]['input']>;
 export type IpcOutput<C extends IpcChannel> = z.output<IpcContract[C]['output']>;
 
 /** Shape of `window.api`, exposed by the preload script. */

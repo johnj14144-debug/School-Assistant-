@@ -11,3 +11,5 @@ re-debate. Don't rewrite old ADRs. Supersede them with a new one that links back
 | [0003](0003-claude-via-user-cli.md) | Use Claude through the user's own `claude` CLI and subscription | Accepted |
 | [0004](0004-telegram-cloudflare-relay.md) | Telegram bot hosted on a free Cloudflare Worker relay | Accepted |
 | [0005](0005-sqlite-drizzle.md) | SQLite via better-sqlite3 + Drizzle ORM | Accepted |
+| [0006](0006-textbook-first-roadmap-coach.md) | The coach researches, plans for the stated goal and decomposes; it doesn't author textbooks | Accepted |
+| [0007](0007-local-time-recurrences.md) | Instants in UTC; recurring fixed events in local time + IANA zone | Accepted |

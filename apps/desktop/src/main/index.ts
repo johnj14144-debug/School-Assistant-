@@ -1,8 +1,9 @@
 import { join } from 'node:path';
-import { app, BrowserWindow, shell, type Tray } from 'electron';
+import { app, BrowserWindow, Menu, session, shell, type Tray } from 'electron';
 import icon from '../../resources/icon.png?asset';
 import { createHandlers } from './handlers';
 import { registerIpcHandlers } from './ipc';
+import { isAllowedNavigation, isSafeExternalUrl } from './security';
 import { createTray } from './tray';
 
 // Sets the userData folder to %APPDATA%/School Assistant (also in development).
@@ -12,6 +13,8 @@ let mainWindow: BrowserWindow | null = null;
 // Module-level so the tray icon is not garbage-collected.
 let tray: Tray | null = null;
 let quitting = false;
+
+const devServerUrl = process.env.ELECTRON_RENDERER_URL;
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -32,10 +35,15 @@ function createWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => win.show());
 
-  // Links open in the default browser, never inside the app.
+  // Links open in the default browser, never inside the app. Only web/mail links get through.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isSafeExternalUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // The renderer never navigates away from the app (dev server in development, file:// in prod).
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigation(url, { devServerUrl })) event.preventDefault();
   });
 
   // Closing the window hides it; the app keeps running in the tray.
@@ -46,8 +54,8 @@ function createWindow(): BrowserWindow {
     }
   });
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  if (devServerUrl) {
+    void win.loadURL(devServerUrl);
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
@@ -72,6 +80,12 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     app.setAppUserModelId('com.schoolassistant.app');
+    // No web permissions (camera, geolocation, etc.) are ever needed by the renderer.
+    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
+      callback(false),
+    );
+    // The packaged app has no menu bar; this also drops the DevTools and reload shortcuts.
+    if (app.isPackaged) Menu.setApplicationMenu(null);
     registerIpcHandlers(createHandlers());
     mainWindow = createWindow();
     tray = createTray(icon, showWindow);

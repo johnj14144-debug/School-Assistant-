@@ -4,8 +4,8 @@ export function CoachPage() {
   return (
     <PlaceholderPage
       title="Life Coach"
-      description="Your big goals turned into full college-style courses, with homework and exams, taught the way you learn best."
-      milestone="M10–M11"
+      description="Your big goals turned into a researched roadmap of the best textbooks, projects and competitions, broken down into tasks on your calendar."
+      milestone="M11–M13"
     />
   );
 }

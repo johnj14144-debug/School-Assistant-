@@ -20,5 +20,5 @@ would cost tokens.
 
 ## Consequences
 - Reminders and timer taps work with the laptop asleep, with accurate timestamps.
-- The user needs a free Cloudflare account and a BotFather token (setup in M8).
+- The user needs a free Cloudflare account and a BotFather token (setup in M14; was M8 before the 2026-10-02 roadmap re-cut).
 - A second deployable (`apps/relay`) to maintain; kept deliberately tiny.
