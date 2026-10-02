@@ -42,7 +42,9 @@ packages/core/src/
 apps/desktop/
   electron.vite.config.ts  electron-builder.yml  resources/ (icons)
   src/main/      index.ts (window, tray, lifecycle), ipc.ts (validated dispatcher),
-                 handlers.ts (channel implementations), features/<name>/ (services),
+                 handlers.ts (channel implementations), security.ts (URL policy: links
+                 open in the browser only for http/https/mailto, the window never navigates
+                 off the app), features/<name>/ (services),
                  db/ (Drizzle schema + migrations, M1), ai/ (claude runner, M7)
   src/preload/   exposes window.api (contextIsolation + sandbox on)
   src/shared/    ipc.ts: the IPC contract, imported by main, preload and renderer
@@ -60,7 +62,8 @@ services and IPC handlers in `apps/desktop/src/main/features/<feature>/`, and sc
 
 `apps/desktop/src/shared/ipc.ts` declares every channel with zod `input`/`output` schemas.
 `createIpcDispatcher` validates both directions, and `IpcHandlers` makes a missing handler a
-compile error. To add a call:
+compile error. Handlers receive the *parsed* input (`IpcParsedInput`, zod defaults applied),
+while the renderer passes `IpcInput`. To add a call:
 
 1. Add the channel to `ipcContract`.
 2. Implement it in `src/main/handlers.ts` (or a feature module it delegates to).

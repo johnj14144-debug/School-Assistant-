@@ -8,8 +8,14 @@ files:
   - out/**
   - resources/**
   - package.json
+# Native modules (better-sqlite3 from M1) ship N-API prebuilt binaries, so there is nothing to
+# compile. Rebuilding would need Visual Studio Build Tools on the laptop.
+npmRebuild: false
 asarUnpack:
   - resources/**
+  - "**/*.node"
+# Personal app: never try to upload a release anywhere.
+publish: null
 win:
   target: nsis
   icon: resources/icon.ico

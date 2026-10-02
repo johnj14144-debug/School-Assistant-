@@ -1,7 +1,9 @@
 import { ipcMain } from 'electron';
-import { type IpcChannel, type IpcInput, type IpcOutput, ipcContract } from '../shared/ipc';
+import { type IpcChannel, type IpcOutput, type IpcParsedInput, ipcContract } from '../shared/ipc';
 
-type Handler<C extends IpcChannel> = (input: IpcInput<C>) => IpcOutput<C> | Promise<IpcOutput<C>>;
+type Handler<C extends IpcChannel> = (
+  input: IpcParsedInput<C>,
+) => IpcOutput<C> | Promise<IpcOutput<C>>;
 
 /** One handler per contract channel; the type makes a missing handler a compile error. */
 export type IpcHandlers = { [C in IpcChannel]: Handler<C> };
