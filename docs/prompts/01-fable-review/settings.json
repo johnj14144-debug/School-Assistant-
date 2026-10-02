@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "Bash(pnpm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(corepack *)",
+      "Bash(ls *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git push -u origin review/plan-revision)",
+      "Bash(git push origin review/plan-revision)",
+      "Bash(ls)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(git log)",
+      "Bash(git branch)",
+      "Bash(git fetch)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push origin main *)",
+      "Bash(git reset --hard *)",
+      "Bash(rm -rf *)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

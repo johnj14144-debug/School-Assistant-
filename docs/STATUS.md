@@ -11,12 +11,17 @@ _Last updated: 2026-10-02 (session 1: brainstorm + M0)_
   tests are green.
 - Nothing is stored yet: there is no database and no real features.
 
-## Next session: M1 — Courses & Grade Calc
+## Next session: Fable deep review, then M1
 
-Start with core grade math in `packages/core/src/grades/` (tests first), then add Drizzle +
-better-sqlite3 in `apps/desktop/src/main/db/`, then the IPC channels, then the Grades screens.
-See ROADMAP.md for the checklist and acceptance criteria. Ask the user for one real course
-syllabus to use as test data.
+1. **Deep review (owner's Console credits, $13 cap).** Run the unattended review described in
+   `docs/prompts/01-fable-review/` (see `docs/prompts/README.md` for the exact command). It
+   verifies the plan's assumptions, writes `docs/reviews/2026-10-plan-review.md`, revises the docs,
+   hardens the foundation on the owner's Windows machine, and writes `docs/prompts/next-session.md`.
+2. **Then the first build session** uses `docs/prompts/next-session.md`. If the review never
+   ran, start M1 (Courses & Grade Calc) directly: core grade math in
+   `packages/core/src/grades/` (tests first), then Drizzle + better-sqlite3 in
+   `apps/desktop/src/main/db/`, then IPC channels, then the Grades screens. Ask the owner for
+   one real course syllabus to use as test data.
 
 ## Gotchas learned so far
 

@@ -48,3 +48,4 @@ updates the status note for the next one.
 | [docs/STATUS.md](docs/STATUS.md) | Where things stand right now |
 | [docs/IDEAS.md](docs/IDEAS.md) | Parked ideas for later |
 | [docs/decisions/](docs/decisions/) | Why key choices were made |
+| [docs/prompts/](docs/prompts/) | Ready-to-run prompts for specific sessions (e.g. the deep review) |
