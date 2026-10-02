@@ -40,6 +40,7 @@ marked with the milestone that adds them (see [ROADMAP.md](ROADMAP.md)).
 ```
 packages/core/src/
   grades/        letter scales, course grade math (M1)
+  retention/     which dated backups and logs to keep (M1)
   time/          recurrence expansion with time zones, availability windows (M4)
   scheduler/     time-blocking + re-planning (M5–M6)
   estimator/     duration learning (M7)
@@ -49,9 +50,10 @@ apps/desktop/
   electron.vite.config.ts  electron-builder.yml  resources/ (icons)
   src/main/      index.ts (window, tray, lifecycle), security.ts (URL policy), ipc.ts
                  (validated dispatcher), handlers.ts (composes per-feature handler objects),
-                 log.ts (M1), db/ (Drizzle schema + migrations + backup, M1),
+                 runtime.ts (opens the DB, builds services), log.ts,
+                 db/ (schema, migrations/, migrate, database, settings, backup),
                  features/<name>/ (services + that feature's IPC handlers),
-                 ai/ (claude runner + job queue, M9)
+                 ai/ (claude runner + job queue, M9), test/ (test helpers)
   src/preload/   exposes window.api (contextIsolation + sandbox on)
   src/shared/    ipc.ts: the IPC contract, imported by main, preload and renderer
   src/renderer/src/
@@ -77,18 +79,34 @@ transforms in the schema apply. To add a call:
 3. Call `window.api.invoke('<channel>', input)` from the renderer. It is fully typed.
 
 Handler errors are logged in main (`log.ts`) before Electron forwards them to the renderer.
+Feature handler objects are typed `HandlersFor<'prefix'>` (every channel starting with that
+prefix). If the database fails to open, only the `app:*` channels work and the renderer shows
+an error screen (`app:status`).
 
 ## Storage, backups and logging (M1)
 
 - SQLite in `%APPDATA%/School Assistant/school-assistant.db` (`app.getPath('userData')`),
-  `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`. Drizzle migrations run on startup
-  inside a transaction; a failed migration keeps the old file and shows an error screen.
-- **Backup:** once a day (and on demand) `VACUUM INTO '<backupDir>/school-assistant-YYYY-MM-DD.db'`.
-  Keep the last 14 daily files and the first of each month. `backupDir` is a setting with a
-  default under the user's Documents folder; the Settings page lets the owner pick OneDrive.
-  Restore = quit, copy the chosen file over the live DB, relaunch (M8 adds the UI).
-- **Log:** `electron-log` to `app.getPath('logs')`, daily files, 7 kept, `info` by default.
-  Every AI job writes its command line (without prompt text), duration, usage and outcome.
+  `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, opened by `db/database.ts`.
+- **Migrations** (ADR 0008): drizzle-kit writes SQL from `db/schema.ts`
+  (`pnpm --filter @sa/desktop db:generate`); the files are embedded in the bundle and
+  `db/migrate.ts` applies the pending ones in one transaction, tracked by `PRAGMA user_version`.
+  A failure rolls back, leaves the file untouched and shows the error screen; a database newer
+  than the app is refused.
+- **Settings** (`db/settings.ts`): typed keys, each with a zod schema and default, stored as
+  JSON text in the `setting` table.
+- **Backup** (`db/backup.ts`): `VACUUM INTO '<folder>/school-assistant-YYYY-MM-DD.db'` (local
+  date), written as `….partial` and renamed when complete. Checked a minute after startup and
+  every 30 minutes; runs when today's file is missing from the folder; "Back up now" replaces
+  today's file. Keeps the newest 14 dated files plus the earliest of every month
+  (`datesToPrune` in core); other files in the folder are never touched. The folder is the
+  `backup.folder` setting, default `Documents\School Assistant Backups`; picking a folder in
+  Settings backs up into it first, so an unwritable folder is rejected. The last success and
+  the last error are settings shown on the Settings page.
+  Restore = quit, delete the live DB and its `-wal`/`-shm` files, copy the backup in under the
+  live name, relaunch (M8 adds the UI).
+- **Log** (`log.ts`): `electron-log` to `app.getPath('logs')` as `main-YYYY-MM-DD.log`, 7 days
+  kept, `info` by default; uncaught errors are logged. Every AI job writes its command line
+  (without prompt text), duration, usage and outcome.
 - The database and logs are never committed.
 
 ## Data model (target)
@@ -99,9 +117,9 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | Entity | Key fields | Milestone |
 |---|---|---|
 | Setting | key, value (JSON) | M1 |
-| Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale, color, goalId?, milestoneId?, primaryMaterialIds | M1 |
-| GradeCategory | courseId, name, weight, dropLowest | M1 |
-| Assignment | courseId, categoryId, title, dueAt, pointsPossible, pointsEarned?, unitId? | M1 |
+| Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale (JSON), color, createdAt, updatedAt; goalId?, milestoneId?, primaryMaterialIds added in M12 | M1 |
+| GradeCategory | courseId, name, weight (percent), dropLowest, position | M1 |
+| Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
 | Task | title, description, courseId?, assignmentId?, unitId?, parentId?, type, quantity+unit, estimateMin, dueAt?, earliestStart?, priority, splittable, minChunkMin, attention (`focus`/`light`/`background`), steps, today (bool + order), status | M3 |
 | TimeSession | taskId, startAt, endAt?, source (`desktop`/`phone`/`manual`) | M3 |
 | Completion | taskId, completedAt, summary | M3 |
@@ -124,6 +142,25 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | CoachNote | goalId?, text, source (`app`/`phone`/`feedback`) | M11 |
 | RelayCursor / Reminder / PhoneEvent | sync state with the relay | M14 |
 | Report | kind (`weekly_research`/`weekly_review`), weekOf, markdown, data | M16 |
+
+## Grade math (M1, `packages/core/src/grades`)
+
+`courseGrade({ grading, categories, assignments })` returns current, max and min percents with a
+per-category breakdown and warnings.
+
+- **Weighted:** a category's percent pools its points (earned / possible); the course grade is
+  the weight-averaged category percent. **Points:** everything pools; weights are ignored.
+- **Current** uses graded work only, renormalizing weights over graded categories. **Max** puts
+  100% on everything ungraded; **min** puts 0%. A weighted category with nothing entered is
+  fully open (100% for max, 0% for min).
+- **Drop lowest** (per category, both grading types) removes the scores whose removal raises
+  the category most (exact, via Dinkelbach's method), always keeping one. For the current grade
+  it drops among graded work only.
+- **Extra credit:** earned above possible counts; an `extraCredit` assignment adds its earned
+  points without adding its possible points, is never dropped, and counts at full value in the
+  max only.
+- Warnings: weights not summing to 100 (weights are renormalized), uncategorized assignments in
+  a weighted course (ignored). Results are rounded at 1e-10 so float noise can't cost a letter.
 
 ## Time and recurrence (M4, `packages/core/src/time`)
 
@@ -258,7 +295,7 @@ always carries a visible feasibility warning.
 | Layer | Tool | Where |
 |---|---|---|
 | Domain logic | Vitest (+ fast-check from M5) | `packages/core/src/**/*.test.ts` |
-| Main-process services | Vitest with `electron` mocked | `apps/desktop/src/main/**/*.test.ts` |
+| Main-process services | Vitest with `electron` mocked; real SQLite (`:memory:` or temp files) | `apps/desktop/src/main/**/*.test.ts` |
 | AI features | Vitest + fake `claude` executable | M9 |
 | End-to-end smoke | Playwright `_electron` | M3 |
 

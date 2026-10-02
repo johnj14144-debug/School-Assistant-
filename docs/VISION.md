@@ -167,6 +167,17 @@ reset. The app never uses API keys. The only overflow allowed is Anthropic's own
   remaining), and min possible grade.
 - Supports weighted-category and points-based courses, and per-course letter scales.
 - Self-study courses from the Life Coach appear here too.
+- **How grades are computed** (defaults chosen in M1, the usual Canvas conventions; the owner
+  can change them):
+  - The current grade counts graded work only. Categories with nothing graded yet don't count.
+  - Max assumes 100% on everything not yet graded; min assumes 0%. A category with no
+    assignments entered yet (e.g. a final exam worth 25%) counts as wide open.
+  - "Drop the lowest N" drops the scores that help the grade most, which is usually but not
+    always the lowest percent (a 0/1 can matter less than a 50/100).
+  - Extra credit: scoring above the points possible counts, and an assignment marked extra
+    credit adds points without adding to the total. Ungraded extra credit is counted in the max
+    (you could still earn it) but not in the min.
+  - Grades aren't rounded before the letter is picked (89.99% is not an A-).
 
 ---
 

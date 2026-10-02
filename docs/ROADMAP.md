@@ -25,21 +25,24 @@ they are all true.
       (`security.ts`), IPC parsed-input type, installer config, CI timeout; spec, design and
       roadmap rewritten around the owner's answers (ADRs 0006–0007)
 
-## M1 — Database, backups, log, grade math
+## M1 — Database, backups, log, grade math ✅ (except the owner's CLI spike)
 
-- [ ] Drizzle + better-sqlite3 (≥ 13.0.2, which ships prebuilt binaries and has no install
+- [x] Drizzle + better-sqlite3 (≥ 13.0.2, which ships prebuilt binaries and has no install
       script) in main (`src/main/db/`): WAL, foreign keys, migrations on startup in a
-      transaction, error screen if a migration fails; `Setting` table
-- [ ] Daily backup (`VACUUM INTO`) to a folder setting (default under Documents; folder picker
+      transaction, error screen if a migration fails; `Setting` table (ADR 0008)
+- [x] Daily backup (`VACUUM INTO`) to a folder setting (default under Documents; folder picker
       in Settings), keep last 14 + first of month; "Back up now" button
-- [ ] `electron-log` → `app.getPath('logs')`; IPC handler errors logged
-- [ ] Core: course grade math for weighted-category and points-based courses, drop-lowest,
+- [x] `electron-log` → `app.getPath('logs')`; IPC handler errors logged
+- [x] Core: course grade math for weighted-category and points-based courses, drop-lowest,
       extra credit; current %, **max possible %** (100% on everything ungraded), min possible %
-- [ ] Course / GradeCategory / Assignment tables and IPC channels (no screens yet beyond a
+- [x] Course / GradeCategory / Assignment tables and IPC channels (no screens yet beyond a
       debug list)
-- [ ] **Claude CLI spike (manual, owner's laptop):** run
+- [ ] **Claude CLI spike (manual, owner's laptop):** the owner runs
+      `scripts/claude-cli-spike.ps1` (copy-paste into PowerShell; it does the runs below with
+      correct quoting) and pastes the output into a session. The runs:
       `echo "Return ok" | claude -p --output-format json --json-schema '{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}'`
-      while logged in, then the same with `--model opus` and with `--setting-sources user`;
+      while logged in, then the same with `--model opus`, `--setting-sources user`,
+      `--strict-mcp-config` with no servers, and `--safe-mode`;
       record `claude --version`, `claude auth status`, whether `structured_output` came back,
       whether Opus works on the plan, and (if it ever happens) what a usage-limit result
       looks like, in STATUS gotchas

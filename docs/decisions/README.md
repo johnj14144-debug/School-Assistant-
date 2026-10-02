@@ -13,3 +13,4 @@ re-debate. Don't rewrite old ADRs. Supersede them with a new one that links back
 | [0005](0005-sqlite-drizzle.md) | SQLite via better-sqlite3 + Drizzle ORM | Accepted |
 | [0006](0006-textbook-first-roadmap-coach.md) | The coach researches, plans for the stated goal and decomposes; it doesn't author textbooks | Accepted |
 | [0007](0007-local-time-recurrences.md) | Instants in UTC; recurring fixed events in local time + IANA zone | Accepted |
+| [0008](0008-embedded-migrations.md) | Migrations: drizzle-kit SQL embedded in the bundle, applied by our own runner | Accepted |

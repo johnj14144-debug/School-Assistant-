@@ -4,9 +4,11 @@ packages:
 
 # pnpm only runs install scripts for packages listed here.
 onlyBuiltDependencies:
-  - better-sqlite3
   - esbuild
 
-# Squirrel installer tooling we don't use (the Windows installer is NSIS).
 ignoredBuiltDependencies:
+  # Squirrel installer tooling we don't use (the Windows installer is NSIS).
   - electron-winstaller
+  # Ships prebuilt binaries. pnpm would still run an implicit `node-gyp rebuild` (it has a
+  # binding.gyp), which is a no-op when a prebuild exists but needs Visual Studio on Windows.
+  - better-sqlite3
