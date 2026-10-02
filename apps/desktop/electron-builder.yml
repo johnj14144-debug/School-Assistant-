@@ -1,0 +1,20 @@
+# Windows installer config. Build with `pnpm --filter @sa/desktop dist` on Windows.
+appId: com.schoolassistant.app
+productName: School Assistant
+directories:
+  buildResources: resources
+  output: release/${version}
+files:
+  - out/**
+  - resources/**
+  - package.json
+asarUnpack:
+  - resources/**
+win:
+  target: nsis
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: School Assistant
