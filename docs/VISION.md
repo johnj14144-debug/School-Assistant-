@@ -167,8 +167,8 @@ reset. The app never uses API keys. The only overflow allowed is Anthropic's own
   remaining), and min possible grade.
 - Supports weighted-category and points-based courses, and per-course letter scales.
 - Self-study courses from the Life Coach appear here too.
-- **How grades are computed** (defaults chosen in M1, the usual Canvas conventions; the owner
-  can change them):
+- **How grades are computed** (chosen in M1, the usual Canvas conventions; confirmed by the
+  owner, Q7):
   - The current grade counts graded work only. Categories with nothing graded yet don't count.
   - Max assumes 100% on everything not yet graded; min assumes 0%. A category with no
     assignments entered yet (e.g. a final exam worth 25%) counts as wide open.
@@ -210,3 +210,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q6 | Time zone when traveling | Fixed events keep their own zone (Houston by default); display follows the laptop |
 | — | "Reality check" | Don't judge whether the goal is reachable or lower it. Build the plan for the stated goal with feasibility warnings. The real check is impact: "would winning X help with goal Y?" |
 | — | Review pitches P1–P9 | All declined (see `docs/IDEAS.md`), including the pre-run usage estimate |
+| Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |

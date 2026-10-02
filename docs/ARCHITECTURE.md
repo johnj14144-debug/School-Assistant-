@@ -209,18 +209,28 @@ Facts this design relies on were checked against the Claude Code docs on 2026-10
   when `--bare` becomes the default for `-p` (announced in the docs) the fix is one entry, not a
   redesign. Settings shows "Claude Code v2.1.xxx found, logged in" (`claude --version`,
   `claude auth status`) and refuses to run jobs below the minimum version (2.1.259).
-- **Windows:** resolve the real executable (`where claude` → `claude.cmd` → run through
-  `cmd /c`, or the native `claude.exe` if installed) once, cache it, re-check on failure.
+- **Windows:** resolve the real executable once, cache it, re-check on failure. On the
+  owner's laptop it is the native `%USERPROFILE%\.local\bin\claude.exe` (M1 spike); an npm
+  install would be `claude.cmd`, which only runs through `cmd.exe /d /s /c`. Pass arguments as
+  one Windows-quoted string (see `scripts/claude-cli-spike.ps1`), never through a shell.
 - **Working folder:** `<userData>/ai-work/<jobId>/`, empty except for job inputs. Because `-p`
   without `--bare` loads `~/.claude` settings, hooks and MCP servers, and any
-  `CLAUDE.md`/`.mcp.json` in the folder, the folder never contains those. To keep the user's
-  own hooks and MCP servers out too, test in the M1 spike: `--setting-sources` (limits which
-  settings files load), `--strict-mcp-config` with an empty config, and `--safe-mode`
-  (customizations off, login unaffected per the docs).
+  `CLAUDE.md`/`.mcp.json` in the folder, the folder never contains those. The M1 spike showed
+  `--setting-sources user`, `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` and
+  `--safe-mode` all work with the subscription login and still return `structured_output`.
+  `--safe-mode` also trimmed about 5 K tokens from every call, so jobs should use it unless a
+  job needs a customization.
+- **Per-call overhead:** each `-p` call carries roughly 20–26 K input tokens of system prompt
+  and tool definitions before the job's own prompt (M1 spike). The 5-minute prompt cache is
+  shared between back-to-back calls (about 15.7 K tokens read from cache), so related calls
+  should run close together, and multi-stage jobs should resume one session.
+  `total_cost_usd` is computed at list price (`costBasis: "list"`); on the plan it is only an
+  estimate for the usage meter.
 - **Model tiers** are aliases from Settings (`haiku` quick parsing, `sonnet` default and
   research gathering, `opus` synthesis and roadmap design). New model versions need no code
-  change. If `opus` isn't available on the plan or hits its own limit, synthesis falls back to
-  `sonnet`.
+  change. If `opus` hits its own limit, synthesis falls back to `sonnet`. The M1 spike showed
+  `--model opus` works on the owner's plan, and that with no `--model` the CLI picks Opus with
+  the 1M context (`claude-opus-5[1m]` in `modelUsage`), so the runner always passes `--model`.
 - **Structured intents, not free rein:** Claude returns JSON validated by zod schemas from core
   (`structured_output` field). The app applies them. Claude never edits the database.
 - **Job queue:** priority phone > daily > deep work; one job at a time. Each job records
@@ -230,7 +240,12 @@ Facts this design relies on were checked against the Claude Code docs on 2026-10
   "… Sonnet limit …"; `stream-json` also emits `system/api_retry` with `error: "rate_limit"`.
   A hit moves the job to `waiting_for_reset` with `resumeAfter` parsed from the message (else
   +60 min, doubling). Resume uses `--resume <sessionId>`. The exact `-p` JSON shape of a limit
-  hit isn't documented; record it from a real run.
+  hit isn't documented; record it from a real run. A successful result (M1 spike) has
+  `type: "result"`, `subtype: "success"`, `is_error: false`, `api_error_status: null`,
+  `terminal_reason: "completed"`, `num_turns: 2` (structured output arrives through a tool
+  call, so `stop_reason` is `"tool_use"`), `result` (the JSON as text), `structured_output`,
+  `session_id`, `usage`, `modelUsage` keyed by model id, `total_cost_usd` and
+  `permission_denials`. `api_error_status` is the first place to look for a limit hit.
 - **Usage credits (owner decision Q3):** an account setting the owner turns on and caps at
   claude.ai; the app never turns them on. When a research run pauses at a limit, the job page
   offers "Wait for the reset" (default) or "Continue with usage credits", which shows how to

@@ -2,12 +2,12 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-02 (session 3: M1 built)_
+_Last updated: 2026-10-02 (session 3: M1 done, spike recorded)_
 
 ## Where things stand
 
-- **M1 is done in code.** Only the owner's manual Claude CLI spike is left (see "Open
-  questions"); it doesn't block anything until M9.
+- **M1 is done**, including the owner's Claude CLI spike (results under "Gotchas") and the
+  owner's OK on the grade rules (VISION decisions log, Q7).
   - SQLite database (`school-assistant.db` in userData) with WAL, foreign keys, and our own
     migration runner: drizzle-kit SQL embedded in the bundle, applied in one transaction,
     tracked by `PRAGMA user_version`, newer databases refused (ADR 0008). If the database can't
@@ -26,8 +26,7 @@ _Last updated: 2026-10-02 (session 3: M1 built)_
 - Checked in a real Electron run (headless, Xvfb + Playwright): the DB file, the log file and
   a backup file all appear; the sample course shows 88.8% / 95.97% / 40.47% (matches hand
   math); a corrupt DB file shows the error screen and stays byte-identical.
-- `scripts/claude-cli-spike.ps1` is ready for the owner (tested here with PowerShell 7.6
-  against a fake `claude`; quoting checked on edge cases).
+- The owner ran `scripts/claude-cli-spike.ps1` on the laptop; every run succeeded.
 
 ## Next session: M2 — Courses & Grade Calc screens
 
@@ -87,6 +86,17 @@ spike if they haven't.
 - **Windows PowerShell 5.1 strips the quotes inside JSON arguments to native programs**, so a
   hand-typed `claude --json-schema '{"type":…}'` breaks there. The spike script (and later the
   app's runner) starts the process with an exact, Windows-quoted argument string instead.
+- **Claude CLI spike on the owner's laptop (2026-10-02):** Windows 11 (NT 10.0.26200),
+  Windows PowerShell 5.1, Claude Code **2.1.260** (above the 2.1.259 minimum), native
+  `%USERPROFILE%\.local\bin\claude.exe` (no npm shim), no `ANTHROPIC_API_KEY` in the
+  environment. `claude auth status` prints JSON: `loggedIn: true`, `authMethod: "claude.ai"`,
+  `apiKeySource: "/login managed key"`, and `subscriptionType: null` (so the plan can't be
+  read from it). All five runs (default, `--model opus`, `--setting-sources user`,
+  `--strict-mcp-config` with no servers, `--safe-mode`) returned `structured_output: {"ok":
+  true}` in 3–5 s. With no `--model` the CLI used `claude-opus-5[1m]`; `--model opus` gave
+  `claude-opus-5`. Each call carried about 20–26 K input tokens of overhead (`--safe-mode`
+  about 5 K less); the result JSON fields are listed in ARCHITECTURE "Claude bridge". No
+  usage-limit result has been seen yet; record one when it happens.
 - **Claude CLI facts (docs, checked 2026-10-02):** `--bare` never reads the subscription login
   and is announced to become the default for `-p`; `--permission-prompts none` needs v2.1.259+;
   prompts go through stdin (argv is limited on Windows; stdin capped at 10 MB); `-p` without
@@ -102,11 +112,4 @@ spike if they haven't.
 
 ## Open questions for the user
 
-- **Run the Claude CLI spike** (2 minutes): open `scripts/claude-cli-spike.ps1` on GitHub,
-  click "Copy raw file", paste it into Windows PowerShell, press Enter, and paste everything it
-  prints into the next session. Record the result here (leave out the account email).
-- **One real UH syllabus** for M2 test data.
-- **Grade rules to confirm** (VISION "Grade Calc"): ungraded extra credit counts toward the max;
-  grades are not rounded before the letter (89.99% is a B+); drops apply to the current grade
-  as soon as there is more than one graded score. Does any course use excused ("EX")
-  assignments? They aren't modeled yet.
+- Does any course use excused ("EX") assignments? They aren't modeled yet.

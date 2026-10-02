@@ -25,7 +25,7 @@ they are all true.
       (`security.ts`), IPC parsed-input type, installer config, CI timeout; spec, design and
       roadmap rewritten around the owner's answers (ADRs 0006–0007)
 
-## M1 — Database, backups, log, grade math ✅ (except the owner's CLI spike)
+## M1 — Database, backups, log, grade math ✅
 
 - [x] Drizzle + better-sqlite3 (≥ 13.0.2, which ships prebuilt binaries and has no install
       script) in main (`src/main/db/`): WAL, foreign keys, migrations on startup in a
@@ -37,7 +37,7 @@ they are all true.
       extra credit; current %, **max possible %** (100% on everything ungraded), min possible %
 - [x] Course / GradeCategory / Assignment tables and IPC channels (no screens yet beyond a
       debug list)
-- [ ] **Claude CLI spike (manual, owner's laptop):** the owner runs
+- [x] **Claude CLI spike (manual, owner's laptop):** the owner runs
       `scripts/claude-cli-spike.ps1` (copy-paste into PowerShell; it does the runs below with
       correct quoting) and pastes the output into a session. The runs:
       `echo "Return ok" | claude -p --output-format json --json-schema '{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}'`
