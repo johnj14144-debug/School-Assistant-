@@ -22,6 +22,13 @@
       "when": 1790986909824,
       "tag": "0002_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790991709478,
+      "tag": "0003_calendar",
+      "breakpoints": true
     }
   ]
 }

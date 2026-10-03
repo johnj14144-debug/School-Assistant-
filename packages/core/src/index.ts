@@ -1,3 +1,5 @@
+export * from './calendar/rules';
+export * from './calendar/schemas';
 export * from './grades/course-grade';
 export * from './grades/letter';
 export * from './grades/parse-assignments';
@@ -9,5 +11,8 @@ export * from './tasks/history';
 export * from './tasks/quick-add';
 export * from './tasks/schemas';
 export * from './tasks/sessions';
+export * from './time/expand';
 export * from './time/local-date';
 export * from './time/parse-date';
+export * from './time/recurrence';
+export * from './time/zone';

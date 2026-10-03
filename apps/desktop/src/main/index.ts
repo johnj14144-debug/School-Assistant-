@@ -134,6 +134,7 @@ if (!app.requestSingleInstanceLock()) {
         sendToWindow(mainWindow, 'tasks:changed');
         trayHandle.refresh();
       });
+      services.calendarChanges.on(() => sendToWindow(mainWindow, 'calendar:changed'));
       // The tray shows the running timer's minutes.
       trayTicker = setInterval(trayHandle.refresh, 30_000);
     }

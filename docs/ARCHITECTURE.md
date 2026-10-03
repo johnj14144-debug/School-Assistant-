@@ -44,8 +44,9 @@ packages/core/src/
   retention/     which dated backups and logs to keep (M1)
   tasks/         task and session schemas, durations, the quick-add parser, timer session rules,
                  estimate-vs-actual history (M3)
-  time/          local dates and typed date/time parsing (M2–M3); recurrence expansion with time
-                 zones, availability windows (M4)
+  time/          local dates and typed date/time parsing (M2–M3); zone helper, RRULE subset,
+                 recurrence expansion with time zones, availability windows (M4)
+  calendar/      fixed event and block schemas, block overlap rules, "now / next" (M4)
   scheduler/     time-blocking + re-planning (M5–M6)
   estimator/     duration learning (M7)
   coach/         feasibility math, roadmap date planning, decomposition to tasks (M11–M12)
@@ -88,9 +89,10 @@ Handler errors are logged in main (`log.ts`) before Electron forwards them to th
 
 **Events (main → renderer, M3).** `IpcEvents` in the same file lists what main can push; the
 preload exposes `window.api.on(event, listener)` for an allowlist of those names (a sandboxed
-preload can't import the contract, so the names are repeated there). Today there is one,
-`tasks:changed`, sent after any task, Today-list or timer change from anywhere (a page, the
-tray). Renderer pages read through `useLiveQuery`, which reloads on it (ADR 0009).
+preload can't import the contract, so the names are repeated there). `tasks:changed` is sent
+after any task, Today-list or timer change from anywhere (a page, the tray); `calendar:changed`
+(M4) after any fixed event or block change. Renderer pages read through `useLiveQuery`, which
+reloads on both (ADR 0009).
 Feature handler objects are typed `HandlersFor<'prefix'>` (every channel starting with that
 prefix). If the database fails to open, only the `app:*` channels work and the renderer shows
 an error screen (`app:status`).
@@ -136,8 +138,8 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
 | Task | title, description, parentId? (subtasks; cascade delete), courseId? (set null), assignmentId? (set null; sets the course), type (free text), quantity+unit, estimateMin, dueAt?, priority (`low`/`normal`/`high`), attention (`focus`/`light`/`background`), todayOrder? (on the Today list when set), status (`open`/`done`), completedAt?, completionNote, createdAt, updatedAt; unitId? in M12; earliestStart?, splittable, minChunkMin, steps in M5 | M3 |
 | TimeSession | taskId (cascade), startAt, endAt? (null = running), source (`desktop`/`phone`/`manual`) | M3 |
-| FixedEvent | title, kind (`class`/`sleep`/`meal`/`hygiene`/`other`), startLocal, endLocal, rrule, timeZone, exceptions | M4 |
-| Block | taskId?, startAt, endAt, locked, planVersion, reason | M4–M6 |
+| FixedEvent | title, kind (`class`/`sleep`/`meal`/`hygiene`/`other`), courseId? (set null), location, startDate (DTSTART, local), startLocal, endLocal (≤ start = next day), rrule? (null = once), timeZone, exceptions (skipped local dates, JSON) | M4 |
+| Block | taskId? (cascade), title, startAt, endAt, locked, source (`manual`/`planner`), reason; planVersion in M6 | M4–M6 |
 | AiJob | kind, priority, modelAlias, sessionId, stage, status (`queued`/`running`/`waiting_for_reset`/`done`/`failed`/`cancelled`), input, output, usage, costEstimate, resumeAfter, attempts | M9 |
 | LearnerProfile | user notes ("How I learn"), Claude-maintained teaching guide, version | M11 |
 | Goal | title, why, deadline, kind (`exam`/`skill`/`project`/`other`), status | M11 |
@@ -218,10 +220,25 @@ through `assignment:create-many` in one transaction.
 
 ## Time and recurrence (M4, `packages/core/src/time`)
 
-- `expandFixedEvents(events, fromUtc, toUtc)` returns UTC intervals for the window, honoring each
-  event's `timeZone` and DST. Tests cover the March and November transitions.
-- `availability(window, fixedEvents, sleepFloorMin)` returns the free intervals the scheduler may
-  use, never shorter than the sleep floor across any night.
+See ADR 0010.
+
+- `zone.ts`: `toZoned`/`fromZoned`/`zoneOffsetMinutes`/`startOfZonedDay` on cached
+  `Intl.DateTimeFormat` (no `Temporal` in Node 22). Skipped March times move later; repeated
+  November times take the first.
+- `recurrence.ts`: RRULE subset (`FREQ=DAILY|WEEKLY`, `INTERVAL`, `BYDAY`, `UNTIL` as a local
+  date, `COUNT`), `parseRRule`/`formatRRule`/`occurrenceDates`.
+- `expand.ts`: `expandFixedEvents(events, from, to, { sleepFloorMin })` returns occurrences in
+  each event's own zone, skipping exceptions; a sleep shorter than the floor in real time (the
+  March night) is extended at the end (`extendedMin`). `availability(events, from, to)` = window
+  minus every occurrence; `nightsWithoutSleep` lists dates with no sleep starting.
+- `calendar/rules.ts`: `fixedEventProblem` (end ≠ start, sleep ≥ floor, UNTIL after the first
+  day), `findBlockConflict` (nothing in sleep; focus blocks clear of fixed events and each other;
+  background blocks overlap anything but sleep), `agendaNow` (current and next for Today).
+- Main: `features/calendar/service.ts` (`CalendarService`: fixed events CRUD + skip, blocks CRUD
+  with conflict checks, `range(from, to)` with colors, block conflicts and nights without sleep).
+- Renderer: `features/calendar/` (Calendar page with FullCalendar 7 week/day, drag-to-select,
+  task drop list, block/occurrence dialogs; Routine page at `/calendar/routine`), Today page
+  `TodaySchedule` (now / next up; the current block's task becomes the big card's "Planned now").
 
 ## Scheduler (M5–M6, `packages/core/src/scheduler`)
 

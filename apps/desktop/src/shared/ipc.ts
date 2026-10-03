@@ -3,6 +3,11 @@ import {
   assignmentCreateSchema,
   assignmentSchema,
   assignmentUpdateSchema,
+  blockCreateSchema,
+  blockSchema,
+  blockUpdateSchema,
+  calendarRangeInputSchema,
+  calendarRangeSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
   courseCreateSchema,
@@ -10,6 +15,10 @@ import {
   courseSchema,
   courseSummarySchema,
   courseUpdateSchema,
+  fixedEventCreateSchema,
+  fixedEventSchema,
+  fixedEventSkipSchema,
+  fixedEventUpdateSchema,
   gradeCategorySchema,
   historyViewSchema,
   idSchema,
@@ -135,6 +144,19 @@ export const ipcContract = {
   'session:update': { input: sessionUpdateSchema, output: timerStateSchema },
   'session:delete': { input: byId, output: z.void() },
   'history:get': { input: z.void(), output: historyViewSchema },
+
+  // Calendar: the routine (fixed events) and planned blocks
+  'fixed-event:list': { input: z.void(), output: z.array(fixedEventSchema) },
+  'fixed-event:create': { input: fixedEventCreateSchema, output: fixedEventSchema },
+  'fixed-event:update': { input: fixedEventUpdateSchema, output: fixedEventSchema },
+  'fixed-event:delete': { input: byId, output: z.void() },
+  /** Skips one occurrence (a cancelled class), or brings it back. */
+  'fixed-event:skip': { input: fixedEventSkipSchema, output: fixedEventSchema },
+  'block:create': { input: blockCreateSchema, output: blockSchema },
+  'block:update': { input: blockUpdateSchema, output: blockSchema },
+  'block:delete': { input: byId, output: z.void() },
+  /** Occurrences and blocks overlapping [from, to) (at most 62 days). */
+  'calendar:range': { input: calendarRangeInputSchema, output: calendarRangeSchema },
 } as const;
 
 export type IpcContract = typeof ipcContract;
@@ -152,6 +174,8 @@ export type IpcOutput<C extends IpcChannel> = z.output<IpcContract[C]['output']>
 export interface IpcEvents {
   /** Tasks, the Today list or the timer changed (from any window, the tray or a timer). */
   'tasks:changed': undefined;
+  /** Fixed events or blocks changed. */
+  'calendar:changed': undefined;
 }
 export type IpcEvent = keyof IpcEvents;
 

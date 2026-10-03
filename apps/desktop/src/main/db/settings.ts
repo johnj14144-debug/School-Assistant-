@@ -15,6 +15,8 @@ const definitions = {
   },
   /** The focus task the user paused; the timer offers to resume it. */
   'timer.paused': { schema: z.object({ taskId: z.uuid() }).nullable(), fallback: null },
+  /** Minimum real sleep per night in minutes; 7.5 h is the owner's floor and can only go up. */
+  'calendar.sleepFloorMin': { schema: z.number().int().min(450).max(720), fallback: 450 },
 } as const satisfies Record<string, { schema: z.ZodType; fallback: unknown }>;
 
 export type SettingKey = keyof typeof definitions;

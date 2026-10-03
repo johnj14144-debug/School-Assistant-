@@ -36,3 +36,38 @@ export function addDays(date: LocalDate, days: number): LocalDate {
 export function weekday(date: LocalDate): number {
   return new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
 }
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** `YYYY-MM-DD`, the text form used in the database and in date inputs. */
+export function formatLocalDate(d: LocalDate): string {
+  return `${String(d.year).padStart(4, '0')}-${pad(d.month)}-${pad(d.day)}`;
+}
+
+/** `YYYY-MM-DD` → a valid local date, or null. */
+export function parseLocalDate(text: string): LocalDate | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return isValidDate(year, month, day) ? { year, month, day } : null;
+}
+
+/** `HH:mm` (24-hour). */
+export function formatLocalTime(t: LocalTime): string {
+  return `${pad(t.hour)}:${pad(t.minute)}`;
+}
+
+/** `HH:mm` (24-hour) → a local time, or null. */
+export function parseLocalTime(text: string): LocalTime | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text);
+  return match ? { hour: Number(match[1]), minute: Number(match[2]) } : null;
+}
+
+/** Minutes since midnight. */
+export function minuteOfDay(t: LocalTime): number {
+  return t.hour * 60 + t.minute;
+}
+
+export function compareDates(a: LocalDate, b: LocalDate): number {
+  return dayNumber(a) - dayNumber(b);
+}

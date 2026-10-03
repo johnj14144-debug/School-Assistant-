@@ -75,6 +75,25 @@ decisions log):
 - **History** compares estimate and actual per course + type. A task and its subtasks are
   measured once, at the level that had the estimate.
 
+**How the calendar behaves** (chosen in M4; **waiting for the owner to confirm**, Q10):
+- **Routine page** (Calendar → Routine): sleep, morning/evening routines, meals, classes (linked
+  to a Grade Calc course, with room, days, first and last day of term) and anything else; every
+  day, weekly on chosen days (optionally every N weeks), or once. A starter routine is offered
+  (sleep 11 PM–6:30 AM, routines, three meals) to edit.
+- **Sleep is protected:** a sleep event shorter than 7.5 h can't be saved, sleep can't be
+  skipped for a day, and on the night the clocks spring forward sleep is extended an hour at the
+  end (wake 7:30 instead of 6:30). The calendar warns about upcoming nights with no sleep.
+- **Cancelled class:** click it on the calendar → "Skip this day"; bring it back on the Routine
+  page.
+- **Planning by hand:** drag across free time (pick a task or type a title), or drag a task from
+  the list beside the calendar (its remaining estimate sets the length). Blocks move and resize
+  by dragging; "Lock" keeps a block in place when the planner re-plans (M6).
+- **Overlaps:** nothing can be planned into sleep; a normal block can't overlap a class, meal,
+  routine item or another block (it snaps back and says what it hit); a background task's block
+  (laundry) may overlap anything but sleep.
+- **Today page:** "Now" and "Next up" from the calendar, with Start for a block's task; the big
+  card shows the task planned for now ("Planned now") before the top of the Today list.
+
 **Design rule: the algorithm plans and Claude advises.** Scheduling and re-planning are
 deterministic code: instant, free, predictable, testable. Claude handles the fuzzy parts:
 understanding texts, breaking work down, reading syllabi, researching goals, designing

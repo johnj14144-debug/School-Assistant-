@@ -212,3 +212,46 @@ describe('migration 0002 (tasks)', () => {
     upgraded.close();
   });
 });
+
+describe('migration 0003 (calendar)', () => {
+  it('adds fixed events and blocks to a v3 database with data', () => {
+    const file = tempFile();
+    const v3 = new Database(file);
+    migrate(v3, migrations.slice(0, 3));
+    v3.exec(`
+      insert into course values ('c1', 'Calc', '', '', 'enrolled', 'weighted', '[]', '#6366f1', 'x', 'x');
+      insert into task (id, title, created_at, updated_at) values ('t1', 'Calc HW', 'x', 'x');
+    `);
+    v3.close();
+
+    const upgraded = openDatabase(file);
+    const { sqlite } = upgraded;
+    sqlite.exec(`
+      insert into fixed_event (id, title, kind, course_id, start_date, start_local, end_local,
+          rrule, time_zone, created_at, updated_at)
+        values ('e1', 'MATH 2413', 'class', 'c1', '2026-08-24', '10:00', '10:50',
+          'FREQ=WEEKLY;BYDAY=MO,WE,FR', 'America/Chicago', 'x', 'x');
+      insert into block (id, task_id, start_at, end_at, created_at, updated_at)
+        values ('b1', 't1', '2026-10-07T15:00:00.000Z', '2026-10-07T16:00:00.000Z', 'x', 'x');
+    `);
+    expect(sqlite.prepare('select exceptions, location from fixed_event').get()).toEqual({
+      exceptions: '[]',
+      location: '',
+    });
+    expect(sqlite.prepare('select locked, source, title from block').get()).toEqual({
+      locked: 0,
+      source: 'manual',
+      title: '',
+    });
+    expect(() => sqlite.exec("update fixed_event set kind = 'nap'")).toThrow(/CHECK/);
+    expect(() =>
+      sqlite.exec("update block set end_at = '2026-10-07T14:00:00.000Z' where id = 'b1'"),
+    ).toThrow(/CHECK/);
+    // Deleting the course unlinks the class; deleting the task removes its blocks.
+    sqlite.exec("delete from course where id = 'c1'");
+    expect(sqlite.prepare('select course_id from fixed_event').get()).toEqual({ course_id: null });
+    sqlite.exec("delete from task where id = 't1'");
+    expect(sqlite.prepare('select count(*) as n from block').get()).toEqual({ n: 0 });
+    upgraded.close();
+  });
+});

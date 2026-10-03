@@ -15,3 +15,4 @@ re-debate. Don't rewrite old ADRs. Supersede them with a new one that links back
 | [0007](0007-local-time-recurrences.md) | Instants in UTC; recurring fixed events in local time + IANA zone | Accepted |
 | [0008](0008-embedded-migrations.md) | Migrations: drizzle-kit SQL embedded in the bundle, applied by our own runner | Accepted |
 | [0009](0009-timer-sessions-and-change-events.md) | The timer lives in the database; main pushes change events to the renderer | Accepted |
+| [0010](0010-calendar-routine-and-blocks.md) | Calendar: RRULE subset, an Intl zone helper, a protected sleep floor, FullCalendar 7 | Accepted |

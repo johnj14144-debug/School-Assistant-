@@ -40,11 +40,12 @@ export function useIpcEvent<E extends IpcEvent>(
 }
 
 /**
- * `useIpcQuery` that also reloads whenever tasks or the timer change anywhere (another page,
- * the tray, a dialog).
+ * `useIpcQuery` that also reloads whenever tasks, the timer or the calendar change anywhere
+ * (another page, the tray, a dialog).
  */
 export function useLiveQuery<C extends IpcChannel>(channel: C, input?: IpcInput<C>, key = '') {
   const query = useIpcQuery(channel, input, key);
   useIpcEvent('tasks:changed', () => void query.reload());
+  useIpcEvent('calendar:changed', () => void query.reload());
   return query;
 }
