@@ -57,6 +57,24 @@ the first brainstorm (2026-10-02) and the first review (2026-10-02; owner answer
   the essay to tomorrow, I'm sick") to add things or change the day.
 - **Daily rhythm:** morning plan message, evening review, weekly review.
 
+**How the timer and Today list behave** (chosen in M3; the owner can change any of this, see
+Q9 in the decisions log):
+- **One focus task at a time.** Starting a task stops the one that was running at that moment.
+  Tasks marked *background* (laundry, a download) run alongside.
+- **Pause** keeps the task in the timer bar so one click resumes it; **Stop** clears it; **Done**
+  asks "What did you do?" (optional; Enter saves, even when empty) and stops its timers.
+- **"I started at…"** picks an earlier start (5–60 minutes ago or a time). If you forgot to
+  switch tasks, moving the new task's start earlier also ends the previous task then. Sessions
+  can be edited or typed in on the task page.
+- **The Today list** keeps a task until it is done or taken off, so unfinished tasks carry over
+  to tomorrow. Finished tasks show under "Done today" until midnight. The Today page's big card
+  shows the running task, or the first task on the list as "Up next".
+- **Quick add** (Ctrl+K anywhere): "Calc HW 3 fri 5pm ~90m #math @homework !" sets the due date,
+  estimate, course, type and priority; "12 problems" or "pages 45-60" also sets the quantity.
+  A task due today goes on the Today list. Ctrl+Enter adds and starts it.
+- **History** compares estimate and actual per course + type. A task and its subtasks are
+  measured once, at the level that had the estimate.
+
 **Design rule: the algorithm plans and Claude advises.** Scheduling and re-planning are
 deterministic code: instant, free, predictable, testable. Claude handles the fuzzy parts:
 understanding texts, breaking work down, reading syllabi, researching goals, designing
@@ -216,3 +234,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | — | Review pitches P1–P9 | All declined (see `docs/IDEAS.md`), including the pre-run usage estimate |
 | Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
 | Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |
+| Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | **Pending:** the owner tries it and confirms or changes it |

@@ -24,9 +24,9 @@ marked with the milestone that adds them (see [ROADMAP.md](ROADMAP.md)).
 ```
 
 - **Renderer**: React screens. It has no Node access and only talks to main through
-  `window.api.invoke` (typed IPC). It never navigates away from the app and can only open
-  `http(s)`/`mailto` links in the system browser (`src/main/security.ts`). In-app routes are
-  hash routes.
+  `window.api` (typed IPC: `invoke`, and `on` for events from main). It never navigates away
+  from the app and can only open `http(s)`/`mailto` links in the system browser
+  (`src/main/security.ts`). In-app routes are hash routes.
 - **Main process**: owns the database, backups, the log, the scheduler runs, the timer, the AI
   job queue, the relay sync, the tray and notifications.
 - **`packages/core`**: pure TypeScript domain logic with no I/O: zod schemas, grade math,
@@ -42,19 +42,24 @@ packages/core/src/
   grades/        letter scales, course grade math (M1), bulk-paste parser and numbered
                  series for adding assignments (M2)
   retention/     which dated backups and logs to keep (M1)
-  time/          recurrence expansion with time zones, availability windows (M4)
+  tasks/         task and session schemas, durations, the quick-add parser, timer session rules,
+                 estimate-vs-actual history (M3)
+  time/          local dates and typed date/time parsing (M2–M3); recurrence expansion with time
+                 zones, availability windows (M4)
   scheduler/     time-blocking + re-planning (M5–M6)
   estimator/     duration learning (M7)
   coach/         feasibility math, roadmap date planning, decomposition to tasks (M11–M12)
   schemas/       shared zod schemas for domain objects and for Claude's structured outputs
 apps/desktop/
   electron.vite.config.ts  electron-builder.yml  resources/ (icons)
+  e2e/           Playwright smoke test of the built app (M3; `pnpm e2e`)
   src/main/      index.ts (window, tray, lifecycle), security.ts (URL policy), ipc.ts
                  (validated dispatcher), handlers.ts (composes per-feature handler objects),
                  runtime.ts (opens the DB, builds services), log.ts,
                  db/ (schema, migrations/, migrate, database, settings, backup),
                  features/<name>/ (services + that feature's IPC handlers),
-                 ai/ (claude runner + job queue, M9), test/ (test helpers)
+                 tray.ts (tray menu with the timer), ai/ (claude runner + job queue, M9),
+                 test/ (test helpers)
   src/preload/   exposes window.api (contextIsolation + sandbox on)
   src/shared/    ipc.ts: the IPC contract, imported by main, preload and renderer
   src/renderer/src/
@@ -80,12 +85,20 @@ transforms in the schema apply. To add a call:
 3. Call `window.api.invoke('<channel>', input)` from the renderer. It is fully typed.
 
 Handler errors are logged in main (`log.ts`) before Electron forwards them to the renderer.
+
+**Events (main → renderer, M3).** `IpcEvents` in the same file lists what main can push; the
+preload exposes `window.api.on(event, listener)` for an allowlist of those names (a sandboxed
+preload can't import the contract, so the names are repeated there). Today there is one,
+`tasks:changed`, sent after any task, Today-list or timer change from anywhere (a page, the
+tray). Renderer pages read through `useLiveQuery`, which reloads on it (ADR 0009).
 Feature handler objects are typed `HandlersFor<'prefix'>` (every channel starting with that
 prefix). If the database fails to open, only the `app:*` channels work and the renderer shows
 an error screen (`app:status`).
 
 ## Storage, backups and logging (M1)
 
+- `SCHOOL_ASSISTANT_DATA_DIR` (tests only) moves userData, logs and the default backup folder
+  to another folder, so a test run never touches real data.
 - SQLite in `%APPDATA%/School Assistant/school-assistant.db` (`app.getPath('userData')`),
   `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, opened by `db/database.ts`.
 - **Migrations** (ADR 0008): drizzle-kit writes SQL from `db/schema.ts`
@@ -121,9 +134,8 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale (JSON), color, createdAt, updatedAt; goalId?, milestoneId?, primaryMaterialIds added in M12 | M1 |
 | GradeCategory | courseId, name, kind (`regular`/`bonus`, M2), weight (percent; a bonus category's cap in percentage points), dropLowest, position | M1 |
 | Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
-| Task | title, description, courseId?, assignmentId?, unitId?, parentId?, type, quantity+unit, estimateMin, dueAt?, earliestStart?, priority, splittable, minChunkMin, attention (`focus`/`light`/`background`), steps, today (bool + order), status | M3 |
-| TimeSession | taskId, startAt, endAt?, source (`desktop`/`phone`/`manual`) | M3 |
-| Completion | taskId, completedAt, summary | M3 |
+| Task | title, description, parentId? (subtasks; cascade delete), courseId? (set null), assignmentId? (set null; sets the course), type (free text), quantity+unit, estimateMin, dueAt?, priority (`low`/`normal`/`high`), attention (`focus`/`light`/`background`), todayOrder? (on the Today list when set), status (`open`/`done`), completedAt?, completionNote, createdAt, updatedAt; unitId? in M12; earliestStart?, splittable, minChunkMin, steps in M5 | M3 |
+| TimeSession | taskId (cascade), startAt, endAt? (null = running), source (`desktop`/`phone`/`manual`) | M3 |
 | FixedEvent | title, kind (`class`/`sleep`/`meal`/`hygiene`/`other`), startLocal, endLocal, rrule, timeZone, exceptions | M4 |
 | Block | taskId?, startAt, endAt, locked, planVersion, reason | M4–M6 |
 | AiJob | kind, priority, modelAlias, sessionId, stage, status (`queued`/`running`/`waiting_for_reset`/`done`/`failed`/`cancelled`), input, output, usage, costEstimate, resumeAfter, attempts | M9 |
@@ -175,6 +187,34 @@ come from core. Bulk add uses two pure core helpers, `parseAssignmentLines` (pas
 "HW 1, 10/7, 20 pts" lines) and `numberedSeries` ("Video Quiz 1…8", every N days); both return
 local wall-clock due dates, which the renderer turns into UTC instants (ADR 0007), and save
 through `assignment:create-many` in one transaction.
+
+## Tasks, timer and Today list (M3)
+
+- **Tasks** (`features/tasks/service.ts`): subtasks of any depth (a subtask takes its parent's
+  course and type unless given), an assignment link that brings its course, completion with a
+  note (finishing stops the timers of the task and its subtasks), and the Today list
+  (`todayOrder`; unfinished tasks stay on it until done or removed). Open tasks sort by due date,
+  then priority, then age.
+- **Timer** (`features/tasks/timer.ts`, ADR 0009): an open `time_session` is a running timer.
+  One focus/light task at a time, background tasks alongside; pause remembers the task in the
+  `timer.paused` setting. "I started at…" starts (or moves a running start) in the past; typed
+  times may be a minute ahead of the clock. All session writes go through core's
+  `findConflict`/`planStart`/`planMoveStart` (no overlapping focus sessions, sessions end after
+  they start). Error messages name the conflicting session in local time.
+- **Views**: `TaskSnapshot` loads every task, session and course reference once per call and
+  computes own and rolled-up minutes (`ownMinutes`, `rollupMinutes` in core). Today's focus time
+  counts focus/light sessions since local midnight. **History** groups finished tasks by
+  course + type (`typeGroups`): time spent is each task's own time; estimate vs actual measures a
+  task tree once, at the highest finished task that has an estimate.
+- **Quick add** (`parseQuickAdd` in core): due shortcuts (today, tomorrow, fri, next fri,
+  in 3 days, 10/7, Oct 7, 5pm), `~90m` estimate, `!` priority, `#course`, `@type`, and
+  quantities ("12 problems", "pages 45-60") that stay in the title; quoted text is literal.
+  The renderer parses as you type (preview chips) and sends a normal `task:create`.
+- **UI**: a timer bar above every page (`TimerBar`), the Today page's Now card and hand-ordered
+  list, the Ctrl+K palette (add; Ctrl+Enter adds and starts; find a task to start or open; timer
+  commands; navigation), and the tray menu (running/paused task with Pause/Resume/Stop, refreshed
+  on every change and every 30 s). Shared actions and their dialogs (finish note, "I started
+  at…") live in `TaskActionsProvider`.
 
 ## Time and recurrence (M4, `packages/core/src/time`)
 
@@ -326,6 +366,7 @@ always carries a visible feasibility warning.
 | Domain logic | Vitest (+ fast-check from M5) | `packages/core/src/**/*.test.ts` |
 | Main-process services | Vitest with `electron` mocked; real SQLite (`:memory:` or temp files) | `apps/desktop/src/main/**/*.test.ts` |
 | AI features | Vitest + fake `claude` executable | M9 |
-| End-to-end smoke | Playwright `_electron` | M3 |
+| End-to-end smoke | Playwright `_electron` (`playwright-core`) on the built app, with a throwaway profile (`SCHOOL_ASSISTANT_DATA_DIR`) | `apps/desktop/e2e`, `pnpm e2e` |
 
-`pnpm check` runs lint, typecheck and tests. CI runs it on Ubuntu and Windows.
+`pnpm check` runs lint, typecheck and tests. CI runs it on Ubuntu and Windows, then builds and
+runs the smoke test (under `xvfb-run` on Ubuntu).

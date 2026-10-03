@@ -9,7 +9,7 @@ import { formatDateTime } from '../../lib/format';
 import { useLiveQuery } from '../../lib/useIpc';
 import { useNow } from '../../lib/useNow';
 import { useTaskActions } from '../timer/TaskActions';
-import { quantityText } from './format';
+import { quantityText, singularUnit } from './format';
 import { QuickAddInput } from './QuickAddInput';
 import { SessionTable } from './SessionTable';
 import { TaskForm } from './TaskForm';
@@ -40,7 +40,7 @@ export function TaskPage() {
   const isFocus = actions.timer?.focus?.task.id === task.id;
   const perUnit =
     task.quantity && task.actualMin >= 1 && done
-      ? `${formatMinutes(task.actualMin / task.quantity)} per ${quantityText(1, task.unit) || 'unit'}`
+      ? `${formatMinutes(task.actualMin / task.quantity)} per ${singularUnit(task.unit) || 'unit'}`
       : null;
 
   async function remove() {
@@ -51,6 +51,8 @@ export function TaskPage() {
   }
 
   const meta = [
+    assignment && `for ${assignment.title}`,
+    task.dueAt && `due ${formatTaskDue(task.dueAt, now)}`,
     task.type,
     quantityText(task.quantity, task.unit),
     task.priority !== 'normal' && `${task.priority} priority`,
@@ -96,9 +98,12 @@ export function TaskPage() {
                 {task.course.code || task.course.name}
               </Link>
             )}
-            {assignment && <span>· for {assignment.title}</span>}
-            {task.dueAt && <span>· due {formatTaskDue(task.dueAt, now)}</span>}
-            {meta.length > 0 && <span>· {meta.join(' · ')}</span>}
+            {meta.length > 0 && (
+              <span>
+                {task.course && '· '}
+                {meta.join(' · ')}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">

@@ -13,10 +13,11 @@ through Telegram, powered by your own Claude subscription.
 - **Grade Calc**: every grade in every course, your current grade, and the best grade still
   possible.
 
-> Status: **Grade Calc works (M1–M2)**: courses, categories, assignments, bulk paste and live
-> current / best / worst grades, on a SQLite database with daily backups. Next up are tasks,
-> the timer and the Today list (M3). See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
-> [docs/STATUS.md](docs/STATUS.md) for the latest handoff note.
+> Status: **Grade Calc (M1–M2) and the task timer with the Today list (M3) work.** Add tasks
+> with Ctrl+K, put them on today's list, and run the day with a big Start/Stop; the timer survives
+> restarts and shows in the tray, and History compares your estimates with the real time. Next up
+> is the calendar with classes, sleep and meals (M4). See [docs/ROADMAP.md](docs/ROADMAP.md) for
+> what's next and [docs/STATUS.md](docs/STATUS.md) for the latest handoff note.
 
 ## Set up on your Windows laptop
 

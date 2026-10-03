@@ -2,42 +2,69 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 3: M1 and M2 done)_
+_Last updated: 2026-10-03 (session 4: M3 done)_
 
 ## Where things stand
 
-- **M1 is done:** SQLite with our own migration runner (ADR 0008), typed settings, daily
-  backups with retention, `electron-log` files, core grade math, the owner's Claude CLI spike
-  (results under "Gotchas") and the owner's OK on the grade rules (VISION decisions log, Q7).
-- **M2 is done:** Grade Calc screens.
-  - Grades overview: one card per course (current / best / worst + letter), grouped by term.
-  - Add / edit / delete a course: name, code, term (guessed from the date), weighted or points,
-    color, letter scale (presets + editable cutoffs).
-  - Course page, all edited in place: categories (name, regular or **bonus**, weight or cap,
-    drop lowest, grade so far, a "weights add up to 100%" check) and assignments (title,
-    category, due date, score, possible, %, "dropped" tag, extra credit). Enter in a score
-    moves to the next row's score; the add row keeps the category and points; "18/20" in a
-    score sets both; a bad value reverts and shows the error in a toast. Filter by category.
-  - Bulk add: **Paste a list** (`parseAssignmentLines`, live preview with per-line errors, a
-    default category) and **Add a series** (`numberedSeries`: "Video Quiz 1…8", every N days),
-    both saved in one transaction (`assignment:create-many`).
-  - Core: bonus categories (`kind: 'bonus'`, migration `0001_category_kind`), the paste parser,
-    the series generator. The owner's HIST 4318 syllabus is a core test case.
-- **AC check (headless Electron, Xvfb + Playwright):** entering HIST 4318 from the syllabus
-  (7 categories incl. the 5-point bonus, 8 video quizzes and 13 reading responses as two series,
-  7 more by paste, 11 scores typed down the column) took 70 field entries and gave 92.81% (A-)
-  current, 103.6% best, 17.6% worst, which match the hand math and the core test; 3 responses
-  were tagged dropped; the data survived a restart; no page errors. A person typing that should
-  finish well under 5 minutes. **The owner should still try it once on the laptop.**
+- **M1–M2 are done:** database, backups, log, grade math, and the Grade Calc screens (see the
+  ROADMAP; HIST 4318 from the owner's syllabus is the reference course).
+- **M3 is done:** tasks, the timer and the Today list. **The owner can start daily use now.**
+  - Core: `tasks/` (schemas, `parseDuration`/`formatMinutes`, `parseQuickAdd`, session rules
+    `findConflict`/`planStart`/`planMoveStart`, history `ownMinutes`/`rollupMinutes`/
+    `typeGroups`) and `time/` (local dates and the date/time parsing moved out of the bulk-add
+    parser, which now imports it).
+  - DB: `task` and `time_session` (migration `0002_tasks`, plain CREATE TABLEs; the upgrade test
+    covers v2 → latest). Completion lives on the task (`status`, `completed_at`,
+    `completion_note`), not in a separate table (ADR 0009).
+  - Main: `TasksService` (CRUD, subtasks, finish/reopen, Today list, history) and `TimerService`
+    (start/pause/resume/stop, "I started at…", typed-in and edited sessions); `tasks:changed`
+    event to the window; the tray menu shows the timer with Pause/Resume/Stop.
+  - Renderer: timer bar on every page, Today page (Now card, hand-ordered list with drag or
+    Alt+↑/↓, quick add, done today), Tasks page, task page (subtasks, sessions table, note),
+    History page, Ctrl+K palette, finish and "I started at…" dialogs.
+  - `apps/desktop/e2e/smoke.e2e.ts` (Playwright, `pnpm e2e`): launch, navigate, quick add, start,
+    restart (timer still running), stop. CI now builds, fetches Electron and runs it on Ubuntu
+    (xvfb) and Windows.
+- **AC check (headless Electron):** added four tasks with Ctrl+K (course, type, estimate, due,
+  quantity all parsed), started the first "15 min ago", ran laundry as a background task,
+  switched tasks and moved the switch 5 minutes earlier (the previous task's time dropped from
+  15 to 10 minutes), paused and resumed, finished with a note, reordered the list with Alt+↑,
+  restarted the app with the timer running (still running), typed in a 75-minute session and
+  moved its start, and checked History (estimate vs actual per course + type and per task). No
+  page errors.
+- **The owner should try a real day with it** and answer Q9 (below).
 
-## Next session: M3 — Tasks, timer & Today list
+## Next session: M4 — Calendar & routine
 
-Start with the core/data side (Task, TimeSession, Completion tables + migration `0002`, a
-`TasksService` and IPC), then the timer (one running task, sessions survive restart,
-"I started at…" backfill), then the Today list and header widget. See ROADMAP M3 for the AC.
+Start with core `time/`: recurrence expansion for fixed events stored as local time + IANA zone
+(ADR 0007) with tests across the March and November DST changes, then availability windows
+with the 7.5 h sleep floor. Check first whether `Temporal` exists in Node 22 (tests) and
+Electron 44 (app); if not, write the small zone helper ADR 0007 describes (Intl offsets), not
+`Date` arithmetic on local time. Then the FixedEvent table and screens, FullCalendar views,
+manual blocks, and the Today page's "current block / next up". See ROADMAP M4 for the AC.
 
 ## Gotchas learned so far
 
+- **Timer data rules (ADR 0009):** every session write goes through core's `findConflict` /
+  `planStart` / `planMoveStart`; don't insert sessions directly. Task and timer services
+  normalize instants with `toISOString()` so they compare as text; zod's `iso.datetime()` also
+  accepts forms without milliseconds, so normalize anything new that's compared or sorted.
+- **Events from main:** add the name to `IpcEvents` in `shared/ipc.ts` *and* to the list in
+  `src/preload/index.ts` (a sandboxed preload can't import runtime code from shared/). Services
+  stay Electron-free and take an `onChange` callback; `index.ts` forwards it.
+- **Native `<dialog>`:** its `close` event fires a tick after `close()`. Reopening right away
+  would get closed by the stale event, so `Dialog` and the palette ignore `close` when the dialog
+  is open again.
+- **zod 4:** a default for an object input whose fields have defaults is `.prefault({})`;
+  `.default({})` wants the *output* type.
+- **Smoke test:** run it with `pnpm e2e` (it builds first; a stale `out/` tests old code). It
+  sets `SCHOOL_ASSISTANT_DATA_DIR` so nothing touches real data; that variable also works for
+  manual headless checks. The `electron` package downloads its binary synchronously on first
+  `require`, so CI fetches it in its own step. Use `locator.waitFor()`, not `toBeVisible`
+  (that's Playwright Test, not Vitest), and `exact: true` for labels that are substrings of
+  others ("Session start" vs "New session start", "5 min ago" vs "15 min ago").
+- Renderer helpers that tests import must live in `.ts` files (tests are typechecked by
+  `tsconfig.node.json`, which has no JSX); see `features/tasks/format.ts`.
 - **pnpm runs an implicit `node-gyp rebuild` for better-sqlite3** (it has a `binding.gyp`)
   if the package is allowed to build. It is a no-op when a prebuild exists, but on Windows it
   would need Visual Studio. better-sqlite3 is therefore in `ignoredBuiltDependencies` in
@@ -88,10 +115,10 @@ Start with the core/data side (Task, TimeSession, Completion tables + migration 
   origin or `file://`. In-app routes must stay hash routes, and external links must open in a
   new window (`target="_blank"`) so they reach `setWindowOpenHandler` → the default browser.
 - **Headless checks in cloud sessions:** build (`pnpm build`), start `Xvfb :99`, then launch
-  with Playwright's `_electron` (global Playwright at `/opt/node-tools/node_modules/playwright`),
+  with `_electron` from the repo's `playwright-core` (devDependency of the desktop app),
   `executablePath: apps/desktop/node_modules/electron/dist/electron`, args
-  `[apps/desktop, '--no-sandbox', '--disable-gpu']`, and `HOME`/`XDG_CONFIG_HOME` pointed at a
-  temp folder so userData, logs and Documents are throwaway.
+  `[apps/desktop, '--no-sandbox', '--disable-gpu']`, and `SCHOOL_ASSISTANT_DATA_DIR` set to a
+  temp folder. `pnpm e2e` with `DISPLAY=:99` runs the smoke test the same way.
 - **Testing PowerShell scripts in cloud sessions:** `packages.microsoft.com` is reachable;
   download the PowerShell `.deb` from `/ubuntu/24.04/prod/pool/main/p/powershell/`, unpack with
   `dpkg -x`, and run `opt/microsoft/powershell/7/pwsh`. GitHub release downloads are blocked.
@@ -124,4 +151,9 @@ Start with the core/data side (Task, TimeSession, Completion tables + migration 
 
 ## Open questions for the user
 
-- None right now. (Excused assignments: not needed, VISION decisions log Q8.)
+- **Q9: does the timer and Today list behave the way you want?** M3 made these choices (all
+  written down in VISION under "How the timer and Today list behave"): one focus task at a time
+  with background tasks alongside; Pause keeps the task ready to resume while Stop clears it;
+  Done asks for an optional note; unfinished tasks stay on the Today list until done or removed
+  (they carry over to tomorrow); "fri" means the next Friday, never today; a task due today is
+  added to the Today list. Say which to change after a day or two of use.

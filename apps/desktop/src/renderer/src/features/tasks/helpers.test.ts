@@ -4,7 +4,7 @@ beforeAll(() => {
   process.env.TZ = 'America/Chicago';
 });
 
-const { quantityText } = await import('./format');
+const { quantityText, singularUnit } = await import('./format');
 const { createInput, parseLine } = await import('./quickAdd');
 const { moveId } = await import('../today/order');
 const { matchesQuery } = await import('../palette/match');
@@ -17,6 +17,8 @@ describe('task helpers', () => {
     expect(quantityText(1, 'pages')).toBe('1 page');
     expect(quantityText(2.5, '')).toBe('2.5');
     expect(quantityText(null, 'pages')).toBe('');
+    expect(singularUnit('problems')).toBe('problem');
+    expect(singularUnit('')).toBe('');
   });
 
   it('turns a quick-add line into a task, leaving untyped fields to the parent', () => {

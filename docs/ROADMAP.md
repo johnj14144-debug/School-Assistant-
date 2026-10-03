@@ -63,18 +63,18 @@ credit and no grades yet; the CLI spike result is in STATUS.
 **AC:** the user can enter a real UH course in under 5 minutes and see the correct current and
 max grade.
 
-## M3 — Tasks, timer & Today list
+## M3 — Tasks, timer & Today list ✅
 
-- [ ] Tasks: title, description, course/assignment link, type, quantity + unit (e.g. 12
+- [x] Tasks: title, description, course/assignment link, type, quantity + unit (e.g. 12
       problems), estimate, due, priority, subtasks
-- [ ] Quick add (Ctrl+K command palette), with natural shortcuts for due dates
-- [ ] Timer: start / pause / resume / stop; one task running at a time (plus background tasks);
+- [x] Quick add (Ctrl+K command palette), with natural shortcuts for due dates
+- [x] Timer: start / pause / resume / stop; one task running at a time (plus background tasks);
       multiple sessions per task; sessions survive restart
-- [ ] **"I started at…" backfill** and editing of sessions; completion note on finish
-- [ ] **Today list:** mark tasks "today", order by hand; Today page shows the list with a big
+- [x] **"I started at…" backfill** and editing of sessions; completion note on finish
+- [x] **Today list:** mark tasks "today", order by hand; Today page shows the list with a big
       Start/Stop; timer visible everywhere (header widget + tray menu)
-- [ ] History view: per task and per type, estimate vs actual
-- [ ] Playwright Electron smoke test (launch, navigate, start/stop a timer)
+- [x] History view: per task and per type, estimate vs actual
+- [x] Playwright Electron smoke test (launch, navigate, start/stop a timer)
 
 **AC:** the user can run their whole day through the Today list and timer; sessions survive an
 app restart; backfill works; history shows estimate vs actual. **Start daily use here.**

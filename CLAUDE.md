@@ -34,6 +34,7 @@ pnpm check            # lint + typecheck + tests (run before every commit)
 pnpm lint:fix         # Biome format + safe fixes
 pnpm test             # Vitest (all projects)
 pnpm build            # production build of the desktop app (apps/desktop/out)
+pnpm e2e              # build + Playwright smoke test of the real app (needs a display)
 pnpm --filter @sa/desktop db:generate   # after editing src/main/db/schema.ts: next SQL migration
 pnpm --filter @sa/desktop dist   # Windows installer (run on Windows)
 pnpm fable-kit        # bundle the whole project into one file for an outside review
@@ -51,7 +52,8 @@ pnpm fable-kit        # bundle the whole project into one file for an outside re
   `src/main/features/<feature>/`, which `src/main/handlers.ts` spreads together. Handlers
   receive the parsed input (`IpcParsedInput`).
 - `apps/desktop/src/renderer/src` — React UI. Screens go in `features/<feature>/`; register pages in
-  `routes.tsx`. Talk to main only via `window.api.invoke`.
+  `routes.tsx`. Talk to main only via `window.api.invoke`; listen for main's events (e.g.
+  `tasks:changed`) with `window.api.on` or `useLiveQuery`.
 - `apps/relay` — Cloudflare Worker for Telegram (arrives in M14).
 - Style: TypeScript strict, Biome formatting (2 spaces, single quotes, 100 cols). Tests next to
   code as `*.test.ts`. Instants are stored in UTC; recurring fixed events store local time + an

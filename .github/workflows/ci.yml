@@ -30,3 +30,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Fetch the Electron binary
+        run: node apps/desktop/node_modules/electron/install.js
+      - name: Smoke test (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter @sa/desktop e2e
+      - name: Smoke test
+        if: runner.os != 'Linux'
+        run: pnpm --filter @sa/desktop e2e
