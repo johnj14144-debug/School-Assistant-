@@ -75,7 +75,7 @@ decisions log):
 - **History** compares estimate and actual per course + type. A task and its subtasks are
   measured once, at the level that had the estimate.
 
-**How the calendar behaves** (chosen in M4; **waiting for the owner to confirm**, Q10):
+**How the calendar behaves** (chosen in M4, confirmed by the owner; Q10 in the decisions log):
 - **Routine page** (Calendar → Routine): sleep, morning/evening routines, meals, classes (linked
   to a Grade Calc course, with room, days, first and last day of term) and anything else; every
   day, weekly on chosen days (optionally every N weeks), or once. A starter routine is offered
@@ -254,3 +254,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
 | Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |
 | Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | Confirmed: "those all work" (2026-10-03) |
+| Q10 | Calendar behavior chosen in M4 (see Planner: "How the calendar behaves") | Confirmed: "all is good" (2026-10-03) |

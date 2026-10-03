@@ -36,7 +36,6 @@ _Last updated: 2026-10-03 (session 5: M4 done)_
 Start in core `scheduler/` with `availability()` from `time/expand.ts` as input (locked and
 manual blocks are busy too; reuse `findBlockConflict`'s rules). Add `fast-check` for the
 property tests. Planner blocks use `source: 'planner'` and fill `reason`; see ROADMAP M5.
-Before that, ask the owner to confirm Q10 (below).
 
 ## Gotchas learned so far
 
@@ -158,8 +157,5 @@ Before that, ask the owner to confirm Q10 (below).
 
 ## Open questions for the user
 
-- **Q10 — calendar behavior chosen in M4** (written up in VISION under "How the calendar
-  behaves"): sleep can't be shorter than 7.5 h or skipped, the spring-forward night wakes an
-  hour later, normal blocks can't overlap classes/meals/routine items (background tasks can),
-  the starter routine's times, and "Planned now" on the Today page. Confirm or say what to
-  change, then record the answer in VISION's decisions log.
+- None right now. (Q10, the calendar behavior chosen in M4, was confirmed by the owner: "all is
+  good". See VISION's decisions log.)
