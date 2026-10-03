@@ -30,8 +30,9 @@ FullCalendar for the week and day views; its current major version is 7.
 - **Blocks** are UTC instants with `source` (`manual` now, `planner` from M5), `locked` (M6's
   re-planner never moves it) and `reason`. Rules in core (`calendar/rules.ts`), enforced on
   every create and move: nothing overlaps sleep; a focus/light block (or one without a task)
-  overlaps no fixed event and no other such block; a background block may overlap anything but
-  sleep. A conflict that appears later (a class added over a block) is shown on the block, not
+  overlaps no fixed event and no other such block; a background block (laundry) may overlap
+  meals, routine items and other blocks, but not sleep, classes or `other` commitments such as
+  tutoring or a chapter meeting, where the owner is away (owner decision Q10). A conflict that appears later (a class added over a block) is shown on the block, not
   fixed silently. Deleting a task deletes its blocks.
 - **Calendar UI:** FullCalendar 7 (`@fullcalendar/react` with its timegrid and interaction
   plugins and the breezy theme, indigo palette), which needs `temporal-polyfill` as a peer.

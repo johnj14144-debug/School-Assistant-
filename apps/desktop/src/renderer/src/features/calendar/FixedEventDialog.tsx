@@ -129,7 +129,7 @@ function Fields({ editing, courses, onClose }: FixedEventDialogProps & { editing
           <input
             className={inputClass}
             value={form.title}
-            placeholder={form.kind === 'class' ? 'MATH 2413' : 'Gym'}
+            placeholder={form.kind === 'class' ? 'MATH 2413' : 'Tutoring'}
             onChange={(e) => set({ title: e.target.value })}
           />
         </label>

@@ -79,7 +79,8 @@ decisions log):
 - **Routine page** (Calendar → Routine): sleep, morning/evening routines, meals, classes (linked
   to a Grade Calc course, with room, days, first and last day of term) and anything else; every
   day, weekly on chosen days (optionally every N weeks), or once. A starter routine is offered
-  (sleep 11 PM–6:30 AM, routines, three meals) to edit.
+  (sleep 11 PM–6:30 AM, morning and evening routines, and two one-hour meals: breakfast
+  7–8 AM and a late dinner 8–9 PM, since the owner walks from the dorm) to edit.
 - **Sleep is protected:** a sleep event shorter than 7.5 h can't be saved, sleep can't be
   skipped for a day, and on the night the clocks spring forward sleep is extended an hour at the
   end (wake 7:30 instead of 6:30). The calendar warns about upcoming nights with no sleep.
@@ -90,7 +91,8 @@ decisions log):
   by dragging; "Lock" keeps a block in place when the planner re-plans (M6).
 - **Overlaps:** nothing can be planned into sleep; a normal block can't overlap a class, meal,
   routine item or another block (it snaps back and says what it hit); a background task's block
-  (laundry) may overlap anything but sleep.
+  (laundry) may overlap meals, routine items and other blocks, but never sleep, a class or
+  another commitment (tutoring, fraternity chapter: kind "Other").
 - **Today page:** "Now" and "Next up" from the calendar, with Start for a block's task; the big
   card shows the task planned for now ("Planned now") before the top of the Today list.
 
@@ -254,4 +256,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
 | Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |
 | Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | Confirmed: "those all work" (2026-10-03) |
-| Q10 | Calendar behavior chosen in M4 (see Planner: "How the calendar behaves") | Confirmed: "all is good" (2026-10-03) |
+| Q10 | Calendar behavior chosen in M4 (see Planner: "How the calendar behaves") | Confirmed with two changes (2026-10-03): background tasks can't overlap classes or commitments like tutoring and fraternity chapter; two meals, a full hour each: breakfast and a late dinner (8–9 PM) |

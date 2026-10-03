@@ -10,7 +10,9 @@ import type { FixedEventKind } from './schemas';
  * 1. Nothing is planned during sleep (the floor is protected no matter what).
  * 2. A focus/light block (or one without a task) overlaps no fixed event and no other such block:
  *    one thing at a time, and classes and meals stay free.
- * 3. A background block (laundry running) may overlap anything but sleep.
+ * 3. A background block (laundry running) may overlap meals, routine items and other blocks,
+ *    but not sleep, classes or other commitments (tutoring, a chapter meeting): the user is away
+ *    or busy then (owner decision Q10).
  *
  * Intervals are half-open: a block may start the minute a class ends.
  */
@@ -65,6 +67,9 @@ export interface BlockConflict extends Span {
   label: string;
 }
 
+/** Fixed events a background block may run alongside. */
+const BACKGROUND_OK: ReadonlySet<FixedEventKind> = new Set(['meal', 'hygiene']);
+
 const overlaps = (a: Span, b: Span) =>
   Date.parse(a.startAt) < Date.parse(b.endAt) && Date.parse(b.startAt) < Date.parse(a.endAt);
 
@@ -79,7 +84,7 @@ export function findBlockConflict(
 ): BlockConflict | null {
   for (const f of fixed) {
     if (!overlaps(candidate, f)) continue;
-    if (f.kind === 'sleep' || !candidate.background) {
+    if (!candidate.background || !BACKGROUND_OK.has(f.kind)) {
       return { with: 'fixed', label: f.label, startAt: f.startAt, endAt: f.endAt };
     }
   }

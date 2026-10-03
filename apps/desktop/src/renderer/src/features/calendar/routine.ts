@@ -52,7 +52,7 @@ export const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const PRESETS: Record<FixedEventKind, Partial<FixedEventForm>> = {
   class: { title: '', startLocal: '10:00', endLocal: '10:50', repeat: 'weekly' },
   sleep: { title: 'Sleep', startLocal: '23:00', endLocal: '06:30', repeat: 'daily' },
-  meal: { title: 'Lunch', startLocal: '12:00', endLocal: '12:30', repeat: 'daily' },
+  meal: { title: 'Dinner', startLocal: '20:00', endLocal: '21:00', repeat: 'daily' },
   hygiene: { title: 'Morning routine', startLocal: '06:30', endLocal: '07:00', repeat: 'daily' },
   other: { title: '', startLocal: '17:00', endLocal: '18:00', repeat: 'weekly' },
 };
@@ -195,15 +195,17 @@ export function describeRepeat(
   return parts.join(' · ');
 }
 
-/** A starting routine to edit: 7.5 h of sleep, morning and evening routines, three meals. */
+/**
+ * A starting routine to edit: 7.5 h of sleep, morning and evening routines, and two meals of a
+ * full hour (the owner eats twice a day, late dinner, with a walk from the dorm).
+ */
 export function starterRoutine(today: string): FixedEventCreate[] {
   const daily = { startDate: today, rrule: 'FREQ=DAILY', timeZone: DEFAULT_TIME_ZONE };
   return [
     { ...daily, title: 'Sleep', kind: 'sleep', startLocal: '23:00', endLocal: '06:30' },
     { ...daily, title: 'Morning routine', kind: 'hygiene', startLocal: '06:30', endLocal: '07:00' },
-    { ...daily, title: 'Breakfast', kind: 'meal', startLocal: '07:00', endLocal: '07:30' },
-    { ...daily, title: 'Lunch', kind: 'meal', startLocal: '12:00', endLocal: '12:30' },
-    { ...daily, title: 'Dinner', kind: 'meal', startLocal: '18:00', endLocal: '18:45' },
+    { ...daily, title: 'Breakfast', kind: 'meal', startLocal: '07:00', endLocal: '08:00' },
+    { ...daily, title: 'Dinner', kind: 'meal', startLocal: '20:00', endLocal: '21:00' },
     { ...daily, title: 'Evening routine', kind: 'hygiene', startLocal: '22:30', endLocal: '23:00' },
   ];
 }

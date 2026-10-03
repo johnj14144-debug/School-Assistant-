@@ -192,12 +192,16 @@ describe('CalendarService: blocks', () => {
     expect(try_('15:50', '17:00')).not.toThrow();
   });
 
-  it('lets a background task run alongside a class but not into sleep', () => {
+  it('lets a background task run alongside a meal, but not a class or sleep', () => {
     const { fixed, block, task } = setupCalendar();
     fixed(MATH);
     fixed(SLEEP);
+    fixed(LUNCH);
     const laundry = task('Laundry', { attention: 'background' });
-    expect(block({ taskId: laundry.id, startAt: at('14:30'), endAt: at('16:00') })).toBeDefined();
+    expect(block({ taskId: laundry.id, startAt: at('16:30'), endAt: at('17:30') })).toBeDefined();
+    expect(() => block({ taskId: laundry.id, startAt: at('14:30'), endAt: at('16:00') })).toThrow(
+      /MATH 2413/,
+    );
     expect(() => block({ taskId: laundry.id, startAt: at('11:00'), endAt: at('12:00') })).toThrow(
       /Sleep/,
     );

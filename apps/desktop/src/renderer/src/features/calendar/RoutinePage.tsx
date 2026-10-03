@@ -150,8 +150,8 @@ export function RoutinePage() {
       {events && events.length === 0 && (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-300 p-6 dark:border-zinc-700">
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Start from a basic day (sleep 11 PM – 6:30 AM, morning and evening routines, three
-            meals) and adjust it, or add events one by one below.
+            Start from a basic day (sleep 11 PM – 6:30 AM, morning and evening routines, breakfast
+            7–8 AM and dinner 8–9 PM) and adjust it, or add events one by one below.
           </p>
           <Button variant="primary" className="mt-3" onClick={() => void addStarter()}>
             Add a starter routine
@@ -191,7 +191,9 @@ export function RoutinePage() {
               <p className="mt-3 text-sm text-zinc-500">
                 {group.kinds.includes('class')
                   ? 'Add each class with its days, times and the first and last day of the term.'
-                  : 'Nothing here yet.'}
+                  : group.kinds.includes('other')
+                    ? 'Tutoring, chapter meetings and other commitments. Background tasks like laundry are never planned over them.'
+                    : 'Nothing here yet.'}
               </p>
             )}
           </section>

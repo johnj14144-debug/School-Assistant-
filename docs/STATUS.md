@@ -157,5 +157,7 @@ property tests. Planner blocks use `source: 'planner'` and fill `reason`; see RO
 
 ## Open questions for the user
 
-- None right now. (Q10, the calendar behavior chosen in M4, was confirmed by the owner: "all is
-  good". See VISION's decisions log.)
+- None right now. (Q10, the calendar behavior chosen in M4, was confirmed with two changes,
+  both made: background blocks can't overlap classes or `other` commitments such as tutoring
+  and fraternity chapter, and the starter routine has two one-hour meals, breakfast 7–8 AM and
+  dinner 8–9 PM. See VISION's decisions log.)

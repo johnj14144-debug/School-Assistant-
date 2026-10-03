@@ -75,14 +75,26 @@ describe('findBlockConflict', () => {
     expect(findBlockConflict(focus('13:30', '14:30', 'calc'), blocks, fixed)).toBeNull();
   });
 
-  it('lets background blocks overlap anything but sleep', () => {
+  it('lets background blocks overlap meals and other blocks, not classes, commitments or sleep', () => {
     const laundry = (from: string, to: string) => ({
       background: true,
       startAt: t(from),
       endAt: t(to),
     });
     expect(findBlockConflict(laundry('16:45', '17:45'), blocks, fixed)).toBeNull();
-    expect(findBlockConflict(laundry('13:00', '15:30'), blocks, fixed)).toBeNull();
+    expect(findBlockConflict(laundry('13:00', '14:30'), blocks, fixed)).toBeNull();
+    expect(findBlockConflict(laundry('13:00', '15:30'), blocks, fixed)).toMatchObject({
+      label: 'MATH 2413',
+    });
+    const chapter: FixedSpan = {
+      kind: 'other',
+      label: 'Chapter meeting',
+      startAt: t('23:00'),
+      endAt: t('23:59'),
+    };
+    expect(findBlockConflict(laundry('22:30', '23:30'), blocks, [chapter])).toMatchObject({
+      label: 'Chapter meeting',
+    });
     expect(findBlockConflict(laundry('11:00', '12:00'), blocks, fixed)).toMatchObject({
       label: 'Sleep',
     });

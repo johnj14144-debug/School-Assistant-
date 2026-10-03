@@ -233,7 +233,8 @@ See ADR 0010.
   minus every occurrence; `nightsWithoutSleep` lists dates with no sleep starting.
 - `calendar/rules.ts`: `fixedEventProblem` (end ≠ start, sleep ≥ floor, UNTIL after the first
   day), `findBlockConflict` (nothing in sleep; focus blocks clear of fixed events and each other;
-  background blocks overlap anything but sleep), `agendaNow` (current and next for Today).
+  background blocks overlap only meals, routine items and other blocks), `agendaNow` (current
+  and next for Today).
 - Main: `features/calendar/service.ts` (`CalendarService`: fixed events CRUD + skip, blocks CRUD
   with conflict checks, `range(from, to)` with colors, block conflicts and nights without sleep).
 - Renderer: `features/calendar/` (Calendar page with FullCalendar 7 week/day, drag-to-select,
