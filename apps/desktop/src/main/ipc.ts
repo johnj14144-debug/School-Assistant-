@@ -1,5 +1,12 @@
-import { ipcMain } from 'electron';
-import { type IpcChannel, type IpcOutput, type IpcParsedInput, ipcContract } from '../shared/ipc';
+import { type BrowserWindow, ipcMain } from 'electron';
+import {
+  type IpcChannel,
+  type IpcEvent,
+  type IpcEvents,
+  type IpcOutput,
+  type IpcParsedInput,
+  ipcContract,
+} from '../shared/ipc';
 import type { Logger } from './log';
 
 type Handler<C extends IpcChannel> = (
@@ -43,3 +50,12 @@ export type HandlersFor<Prefix extends string> = Pick<
   IpcHandlers,
   Extract<IpcChannel, `${Prefix}:${string}`>
 >;
+
+/** Pushes an event to the window's renderer (see `IpcEvents`); a closed window is skipped. */
+export function sendToWindow<E extends IpcEvent>(
+  win: BrowserWindow | null,
+  event: E,
+  ...payload: IpcEvents[E] extends undefined ? [] : [IpcEvents[E]]
+): void {
+  if (win && !win.isDestroyed()) win.webContents.send(event, ...payload);
+}

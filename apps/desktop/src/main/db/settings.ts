@@ -13,6 +13,8 @@ const definitions = {
     schema: z.object({ at: z.iso.datetime(), message: z.string() }).nullable(),
     fallback: null,
   },
+  /** The focus task the user paused; the timer offers to resume it. */
+  'timer.paused': { schema: z.object({ taskId: z.uuid() }).nullable(), fallback: null },
 } as const satisfies Record<string, { schema: z.ZodType; fallback: unknown }>;
 
 export type SettingKey = keyof typeof definitions;

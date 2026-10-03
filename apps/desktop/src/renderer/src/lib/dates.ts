@@ -61,3 +61,104 @@ export function guessTerm(now = new Date()): string {
   const season = month <= 5 ? 'Spring' : month <= 7 ? 'Summer' : 'Fall';
   return `${season} ${now.getFullYear()}`;
 }
+
+/** UTC instant → `YYYY-MM-DDTHH:mm` for an `<input type="datetime-local">`, or ''. */
+export function toDateTimeInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${toDateInput(iso)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** `YYYY-MM-DDTHH:mm` (local) → UTC instant, or null when incomplete. */
+export function fromDateTimeInput(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  return isoFromLocal({ year, month, day, hour, minute });
+}
+
+/** UTC instant → `HH:mm` (local) for an `<input type="time">`, or ''. */
+export function toTimeInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A date input and an optional time input → UTC instant (no time: 11:59 pm), or null. */
+export function fromDateAndTime(date: string, time: string): string | null {
+  if (!date) return null;
+  const t = /^(\d{2}):(\d{2})/.exec(time);
+  return fromDateTimeInput(`${date}T${t ? `${t[1]}:${t[2]}` : '23:59'}`);
+}
+
+/** "2:05 PM" in the laptop's zone. */
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Whether a due date has passed, is today, falls in the next 7 days, or later. */
+export function dueStatus(
+  iso: string | null,
+  now = new Date(),
+): 'none' | 'overdue' | 'today' | 'week' | 'later' {
+  if (!iso) return 'none';
+  const due = new Date(iso);
+  if (due.getTime() < now.getTime()) return 'overdue';
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Rounded: a day across a DST change is 23 or 25 hours long.
+  const days = Math.round(
+    (new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime() -
+      startOfToday.getTime()) /
+      86_400_000,
+  );
+  if (days === 0) return 'today';
+  return days < 7 ? 'week' : 'later';
+}
+
+/** "Today", "Tomorrow", "Fri", "Oct 12" (+ time unless 11:59 pm), for task due dates. */
+export function formatTaskDue(iso: string | null, now = new Date()): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round(
+    (new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - startOfToday.getTime()) /
+      86_400_000,
+  );
+  let day: string;
+  if (days === 0) day = 'Today';
+  else if (days === 1) day = 'Tomorrow';
+  else if (days === -1) day = 'Yesterday';
+  else if (days > 1 && days < 7) day = d.toLocaleDateString(undefined, { weekday: 'short' });
+  else {
+    day = d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+    });
+  }
+  return d.getHours() === 23 && d.getMinutes() === 59 ? day : `${day} ${formatTime(iso)}`;
+}
+
+/**
+ * "I started at 2:15" → the last moment with that local time: today's, or yesterday's if that
+ * hasn't happened yet (typing 11:30 pm just after midnight). null for an incomplete time.
+ */
+export function pastTimeToIso(time: string, now = new Date()): string | null {
+  const match = /^(\d{2}):(\d{2})/.exec(time);
+  if (!match) return null;
+  const at = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    Number(match[1]),
+    Number(match[2]),
+  );
+  if (at.getTime() > now.getTime()) at.setDate(at.getDate() - 1);
+  return at.toISOString();
+}
