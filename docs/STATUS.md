@@ -2,78 +2,73 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 6: M5 merged in #6; M6 prepared)_
+_Last updated: 2026-10-03 (session 7: M6 re-planning built; PR open)_
 
 ## Where things stand
 
-- **M1–M4 are done** (database, backups, log, Grade Calc, tasks, timer, Today list, calendar
-  and routine). The owner can use the app daily.
-- **M5 is done:** "Plan my week" (ADR 0011).
-  - Core `scheduler/`: `grid.ts` (5-minute slots with HARD/SOFT/WORK/BUSY flags),
-    `plan.ts` (`planWeek`: steps and background tasks first, then focus work earliest deadline
-    first with chunks, breaks, interleaving, one-sitting and running-task rules, fallback runs;
-    reasons and warnings), `prepare.ts` (`preparePlan`: leaf tasks, inherited due dates, work
-    left; `planHorizon`), `schemas.ts` (`planRunSchema`, warnings and options). Core
-    `tasks/steps.ts` parses "Load the washer 5m, wait 45m, …". `isBackgroundBlock` in
-    `calendar/rules.ts`.
-  - **Q11 answer applied:** every task has a due date, hard or soft (`task.deadline`); soft
-    deadlines may be planned past and give way to hard ones; tasks without an estimate are
-    planned for `planner.defaultEstimateMin` (60). New tasks without a date get the
-    assignment's, the parent's, or a soft one (tonight for Today, else a week out). The warning
-    option "Make the deadline soft" replaced "plan late" (`allowLate` is gone).
-  - DB: migration `0004_planner` rebuilds the task table (`due_at` NOT NULL, `deadline`,
-    `earliest_start_at`, `splittable`, `min_chunk_min`, `steps`, with CHECKs; hand-fixed copy
-    step fills missing due dates with soft ones) and adds block `kind`; upgrade test v4 →
-    latest with data, subtasks, sessions and blocks. Settings `planner.maxChunkMin` (90),
-    `planner.breakMin` (10), `planner.defaultEstimateMin` (60), `planner.lastRun`.
-  - Main: `features/planner/` (`PlannerService.planWeek/clear/lastRun/preferences`, channels
-    `planner:*`, fires `calendar:changed`). Dragging a planner block makes it manual.
-  - Renderer: Plan my week / Clear plan and the plan panel (warnings with option buttons) on
-    the Calendar page, palette command, Today's empty schedule offers it, "Why here" in the
-    block dialog, planner/wait styles, Planning section in the task form, Settings → Planner.
-  - Tests: unit scenarios, a realistic week (25 tasks in ~2 ms), fast-check properties (rules
-    for any week; deadlines met when the work clearly fits), service tests, `pnpm e2e` has a
-    third test (plan, explain, re-plan).
-- **AC check (headless Electron, TZ=America/Chicago):** starter routine + five classes +
-  tutoring, 25 tasks (homework, readings, lab report, essay, one-sitting practice exam, project,
-  laundry with steps): one click planned 50 blocks (48h 40m of work) through the 7th day with no
-  warnings, no block conflicts and nothing in sleep; the panel appeared 179 ms after the click.
-  Block dialog, Today's Now/Next, task form Planning section and dark mode checked; no page
-  errors.
+- **M1–M5 are done** (database, backups, log, Grade Calc, tasks, timer, Today list, calendar
+  and routine, "Plan my week"). The owner can use the app daily.
+- **M6 is done:** re-planning (ADR 0012; behavior in VISION "How re-planning behaves").
+  - Core `scheduler/plan.ts`: one engine for both entry points. `planWeek` (fresh, unchanged
+    behavior; all M5 tests pass untouched) and `replan(input + previous blocks)`: keep-then-fill
+    stickiness (`chooseSticky` + `consume`), `repackUntil` (early finish re-packs today),
+    `startNowTaskId` (a late task gets the first free time, cut to fit), deadline fallbacks
+    (`none` → `partial` → `full`), kept blocks carry `previousId`. `scheduler/changes.ts`:
+    `diffPlans`, `behindPlan`. Schemas: `planChangeSchema`, `planTriggerSchema`,
+    `planBehindSchema`; `planRunSchema` gained `trigger`, `fallback`, `changes` (with defaults,
+    so a stored M5 run still parses).
+  - Main `PlannerService`: `planWeek()`, `replan(trigger)`, `behind()`, `notify(event)`,
+    `flush()`, `tick()`; blocks sorted into frozen / movable / missed; kept blocks keep their
+    rows. Task, timer and calendar services take `onPlanEvent` (`features/planner/events.ts`):
+    task create/update/delete/reopen and session edits → `edit`; complete and timer stop →
+    `finish` (pause → nothing); every calendar change → `edit`. Runtime builds the planner first
+    and passes `planner.notify`; `index.ts` ticks `planner.tick()` every minute and forwards
+    `services.replans` as the `planner:replanned` event (`ChangeSignal<T>` now carries a
+    payload). Channels `planner:replan`, `planner:behind`. No migration (`block.planVersion`
+    wasn't needed: re-plans keep row ids).
+  - Renderer: `PlanButtons` (Re-plan now leads once a plan exists), "What moved" in the plan
+    panel, `BehindBanner` on Today (polls every 30 s), `ReplanToast` (bottom right, any page,
+    12 s), palette "Re-plan now"; the big Today card offers a block starting within 10 minutes.
+    Wording in `planner/planText.ts` (tested).
+  - Tests: replan unit tests (late start, overrun, early finish, edits, estimate up/down, new
+    class, breaks, deadline fallback, steps), `changes.test.ts`, five fast-check properties for
+    re-plans (15× sweep, ~22,500 runs, clean), realistic week re-planned in ~1.5 ms (~4 ms with a
+    fallback), service tests (behind + Re-plan now, edits, finish/stop/pause, overrun capped by a
+    class, laundry under way, new class), a fourth e2e test (finish early, an edit re-plans with a
+    toast, Re-plan now).
+- **Headless check (TZ=America/Chicago):** four tasks planned, planner blocks seeded 25 minutes
+  late in the throwaway DB: Today showed "Behind plan: Calc HW 4 should have started 25 min ago";
+  "Re-plan now" moved only Calc HW (5 of 6 blocks unchanged, 60 min now + 30 min later, no
+  conflicts), the toast appeared 89 ms after the click, the banner went away and the big card
+  offered Calc HW; Calendar's Re-plan now / What moved and dark mode checked; no page errors.
 - `pnpm check` and `pnpm e2e` pass.
 
-## Next session: M6 — Scheduler v1: re-planning
+## Next session: M7 — Estimation engine
 
-Owner decisions taken before the session (VISION Q12–Q13):
-- **Early finish → re-pack the rest of the day:** everything later today moves earlier, as
-  tightly as it fits (no stickiness for today's remaining blocks; later days stay sticky).
-- **Late start → only remind:** after a 10-minute grace, Today shows the plan is behind
-  ("Calc HW should have started 25 min ago") with **Re-plan now**; nothing moves on its own.
-- Not asked, from the roadmap AC: an **overrun pushes** later work (never into sleep, classes
-  or locked blocks); **task edits** (new task, estimate or due change, done) re-plan too.
-
-Plan for the session:
-1. Core `scheduler/replan.ts`: `replan(input, previous)` keeps each previous future planner
-   block that is still valid (no new overlap, its task still needs that much work, before a
-   hard due date), then places the remaining and displaced work with `placeFocus`/sequences in
-   the free time left; falls back to a full `planWeek` when keeping blocks costs a deadline.
-   An option `repackUntil` (end of today) drops stickiness for blocks before it (early finish).
-   The running task's open session counts as occupying time until its block's end or now +
-   a minimum (overrun pushes what overlaps).
-2. `diffPlans(before, after)`: moved / added / removed per task, for the UI.
-3. Main: `PlannerService.replan(reason)`; triggers from timer stop/complete (early finish →
-   repack today), timer running past its block end (overrun, checked on a 1-minute tick),
-   task create/update/delete and fixed-event changes; debounced; only when a plan exists
-   (`planner.lastRun`). `block.planVersion` (migration 0005) and `planner.lastChange`.
-4. Late start: `behindBy(now, blocks, sessions, grace)` in core; Today shows the banner with
-   Re-plan now. No automatic move.
-5. UI: "Re-plan now" (Calendar, Today, palette), a toast listing what moved.
-6. Tests: unit + fast-check stability properties (a late start then Re-plan now moves only the
-   late task's blocks and those it must displace; an overrun never touches sleep, classes or
-   locked blocks; re-packing keeps every rule from M5), service tests, an e2e step.
+Ask the owner first (Q14–Q15 below), then:
+1. Core `estimator/`: group finished tasks by course + type (History's `typeGroups` is the
+   starting point); per group the actual/estimate ratio and minutes per unit (problems, pages),
+   shrunk toward priors when data is thin; a ~P70 planning duration and a confidence.
+2. `preparePlan` takes a duration function (estimator first, then the task's own estimate, then
+   the default); reasons say which ("Planned for 2h: your Calc HW runs 1.4× your guess").
+3. Task form: suggested estimate next to the estimate field (one click to use it).
+4. Stats page (Reports or Tasks → History): per course and type, ratio and minutes per unit.
+5. Tests: seeded histories with known statistics; the scheduler uses the estimator.
 
 ## Gotchas learned so far
 
+- **Re-planning (M6):** previous blocks must be on the 5-minute grid (absolute epoch multiples)
+  or `chooseSticky` releases them; the planner always makes aligned blocks, but a hand-seeded
+  DB in a check must shift by multiples of 5 minutes. The planner writes blocks directly (not
+  through `CalendarService`), so its own writes never fire plan events; keep it that way or it
+  will loop. Services report plan events only after their own DB write. A waiting automatic
+  re-plan runs only through the injected `schedule` (tests pass a no-op and call
+  `planner.flush()`); `tick()`/`flush()` log errors instead of throwing (they run from timers).
+- **Playwright `waitForFunction` with an async predicate resolves at once** (the promise is
+  truthy). Poll from Node instead (`until()` in `e2e/smoke.e2e.ts`).
+- **Ties in due date** are broken by priority, then `createdAt`, then id; tasks made in one
+  service test share the fake clock's `createdAt`, so give them different due dates when the
+  order matters (random UUIDs decide otherwise).
 - **Scheduler (M5):** `planWeek` is pure and fast; the service does all loading. Planner rules
   must stay in step with `findBlockConflict` (the calendar flags any planner block that breaks
   them as a conflict, and the e2e/service tests assert none do). Block background-ness is
@@ -207,6 +202,14 @@ Plan for the session:
 
 ## Open questions for the user
 
-- None right now. (Q11, the planner behavior chosen in M5, was confirmed with two changes, both
-  made: tasks without an estimate are planned for a default length, and every task has a hard
-  or soft due date. See VISION's decisions log.)
+- **Q14 — confirm the re-planning behavior chosen in M6** (VISION "How re-planning behaves").
+  The choices beyond Q12–Q13: Stop on the timer counts as finishing early (Pause doesn't); an
+  overrunning block grows 15 minutes at a time; "Re-plan now" after a late start starts the late
+  task now and cuts it to fit before the next planned block (the rest goes later) instead of
+  pushing everything after it; the plan follows every task or calendar edit on its own once a
+  plan exists, with a toast saying what moved.
+- **Q15 (before M7) — learned estimates:** when your estimate and the learned one differ (e.g.
+  you say 1 h, your Calc HW history says 1.4×), should the planner (a) plan with the learned one
+  automatically and say so, (b) plan with yours and only suggest, or (c) plan with the learned
+  one only after you accept it per task? And should it plan for "enough 7 times out of 10"
+  (P70) or another level?

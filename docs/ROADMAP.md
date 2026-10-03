@@ -104,13 +104,13 @@ plan a day by hand and run it from the Today page.
 **AC:** given a realistic week (5 courses, 25 tasks), it plans in under 1 s, never overlaps
 focus blocks, never touches sleep, meets every feasible deadline.
 
-## M6 — Scheduler v1: re-planning
+## M6 — Scheduler v1: re-planning ✅
 
-- [ ] Re-plan from now on overrun, early finish (re-pack the rest of the day, Q12), task edits
+- [x] Re-plan from now on overrun, early finish (re-pack the rest of the day, Q12), task edits
       and the manual trigger; a late start only shows "behind" on Today (Q13); past and
       in-progress work frozen; stickiness (minimal moves); locked blocks respected
-- [ ] "Re-plan now" action; a diff of what moved
-- [ ] Property tests for stability: after a 30-minute late start, "Re-plan now" moves only what
+- [x] "Re-plan now" action; a diff of what moved
+- [x] Property tests for stability: after a 30-minute late start, "Re-plan now" moves only what
       it must
 
 **AC:** after a 30-minute late start, "Re-plan now" moves only what it must; an overrun pushes

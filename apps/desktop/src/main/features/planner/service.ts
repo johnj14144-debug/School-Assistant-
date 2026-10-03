@@ -147,7 +147,10 @@ export class PlannerService {
    */
   notify = (event: PlanEvent): void => {
     if (!this.lastRun()) return;
-    if (event.kind === 'finish') this.finish(event.taskIds, event.at);
+    // The user's own change has been saved already; a failure here mustn't undo the call.
+    if (event.kind === 'finish') {
+      this.safely('Ending a finished block', () => this.finish(event.taskIds, event.at));
+    }
     const trigger =
       event.kind === 'finish' || this.pending?.trigger === 'finish' ? 'finish' : 'edit';
     this.pending?.cancel();
