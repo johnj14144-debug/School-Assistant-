@@ -215,3 +215,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | — | "Reality check" | Don't judge whether the goal is reachable or lower it. Build the plan for the stated goal with feasibility warnings. The real check is impact: "would winning X help with goal Y?" |
 | — | Review pitches P1–P9 | All declined (see `docs/IDEAS.md`), including the pre-run usage estimate |
 | Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
+| Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |

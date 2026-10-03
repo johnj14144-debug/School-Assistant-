@@ -124,4 +124,4 @@ Start with the core/data side (Task, TimeSession, Completion tables + migration 
 
 ## Open questions for the user
 
-- Does any course use excused ("EX") assignments? They aren't modeled yet.
+- None right now. (Excused assignments: not needed, VISION decisions log Q8.)
