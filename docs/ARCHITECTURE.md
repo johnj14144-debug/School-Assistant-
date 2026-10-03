@@ -39,7 +39,8 @@ marked with the milestone that adds them (see [ROADMAP.md](ROADMAP.md)).
 
 ```
 packages/core/src/
-  grades/        letter scales, course grade math (M1)
+  grades/        letter scales, course grade math (M1), bulk-paste parser and numbered
+                 series for adding assignments (M2)
   retention/     which dated backups and logs to keep (M1)
   time/          recurrence expansion with time zones, availability windows (M4)
   scheduler/     time-blocking + re-planning (M5–M6)
@@ -118,7 +119,7 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 |---|---|---|
 | Setting | key, value (JSON) | M1 |
 | Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale (JSON), color, createdAt, updatedAt; goalId?, milestoneId?, primaryMaterialIds added in M12 | M1 |
-| GradeCategory | courseId, name, weight (percent), dropLowest, position | M1 |
+| GradeCategory | courseId, name, kind (`regular`/`bonus`, M2), weight (percent; a bonus category's cap in percentage points), dropLowest, position | M1 |
 | Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
 | Task | title, description, courseId?, assignmentId?, unitId?, parentId?, type, quantity+unit, estimateMin, dueAt?, earliestStart?, priority, splittable, minChunkMin, attention (`focus`/`light`/`background`), steps, today (bool + order), status | M3 |
 | TimeSession | taskId, startAt, endAt?, source (`desktop`/`phone`/`manual`) | M3 |
@@ -159,8 +160,21 @@ per-category breakdown and warnings.
 - **Extra credit:** earned above possible counts; an `extraCredit` assignment adds its earned
   points without adding its possible points, is never dropped, and counts at full value in the
   max only.
+- **Bonus categories** (`kind: 'bonus'`, M2): for syllabi like "up to 5 points of extra credit
+  added to your final grade". Earned points in the category are added to the final percent one
+  for one, capped at the category's weight, in both grading types. They are not part of the
+  100% of weights. Empty bonus category: the whole cap in the max, 0 in current and min.
 - Warnings: weights not summing to 100 (weights are renormalized), uncategorized assignments in
   a weighted course (ignored). Results are rounded at 1e-10 so float noise can't cost a letter.
+
+**Entering grades (M2).** The course page (`renderer/src/features/grades/CoursePage.tsx`)
+edits categories and assignments in place (`EditableCell`: Enter or leaving the cell saves,
+Escape cancels, a rejected value reverts and the error shows in a toast). Every change goes
+through one `act()` that calls IPC and then reloads `course:get`, so the grades shown always
+come from core. Bulk add uses two pure core helpers, `parseAssignmentLines` (pasted
+"HW 1, 10/7, 20 pts" lines) and `numberedSeries` ("Video Quiz 1…8", every N days); both return
+local wall-clock due dates, which the renderer turns into UTC instants (ADR 0007), and save
+through `assignment:create-many` in one transaction.
 
 ## Time and recurrence (M4, `packages/core/src/time`)
 

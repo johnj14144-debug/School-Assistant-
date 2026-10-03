@@ -13,8 +13,9 @@ through Telegram, powered by your own Claude subscription.
 - **Grade Calc**: every grade in every course, your current grade, and the best grade still
   possible.
 
-> Status: **database, backups, log and grade math built (M1)**; next up are the Grade Calc
-> screens (M2). See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
+> Status: **Grade Calc works (M1–M2)**: courses, categories, assignments, bulk paste and live
+> current / best / worst grades, on a SQLite database with daily backups. Next up are tasks,
+> the timer and the Today list (M3). See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
 > [docs/STATUS.md](docs/STATUS.md) for the latest handoff note.
 
 ## Set up on your Windows laptop

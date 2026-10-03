@@ -5,8 +5,11 @@ import { cellInputClass } from './inputs';
 interface EditableCellProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'> {
   value: string;
-  /** Called on blur or Enter when the text changed. Throw to reject (the cell reverts). */
-  onCommit: (value: string) => Promise<void> | void;
+  /**
+   * Called on blur or Enter when the text changed. Return (or resolve to) `false`, or throw, to
+   * reject: the cell reverts and shows a red border.
+   */
+  onCommit: (value: string) => unknown;
   /** Called after Enter commits, e.g. to move to the next row. */
   onEnter?: () => void;
 }
@@ -25,19 +28,21 @@ export function EditableCell({ value, onCommit, onEnter, className, ...props }: 
 
   async function commit() {
     if (draft === value) return;
+    let ok: boolean;
     try {
-      await onCommit(draft);
-      setFailed(false);
+      ok = (await onCommit(draft)) !== false;
     } catch {
-      setFailed(true);
-      setDraft(value);
+      ok = false;
     }
+    setFailed(!ok);
+    if (!ok) setDraft(value);
   }
 
   return (
     <input
       {...props}
       value={draft}
+      aria-invalid={failed || undefined}
       className={cn(cellInputClass, failed && 'border-red-400', className)}
       onFocus={(e) => {
         focused.current = true;

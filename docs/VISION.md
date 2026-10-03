@@ -178,6 +178,10 @@ reset. The app never uses API keys. The only overflow allowed is Anthropic's own
     credit adds points without adding to the total. Ungraded extra credit is counted in the max
     (you could still earn it) but not in the min.
   - Grades aren't rounded before the letter is picked (89.99% is not an A-).
+  - **Bonus categories** (added in M2 from the owner's HIST 4318 syllabus: "5 points extra
+    credit can be added to your final grade"): a category can count as a bonus on the final
+    grade instead of as part of it. Its points go straight onto the final percent, up to the
+    category's cap, and it isn't part of the 100% of weights.
 
 ---
 

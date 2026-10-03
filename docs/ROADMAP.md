@@ -51,13 +51,13 @@ they are all true.
 file records startup; core grade math has unit tests covering weighted, points, drops, extra
 credit and no grades yet; the CLI spike result is in STATUS.
 
-## M2 — Courses & Grade Calc screens
+## M2 — Courses & Grade Calc screens ✅
 
-- [ ] Courses CRUD (term, code, color, letter scale, grading type) and categories with weights
+- [x] Courses CRUD (term, code, color, letter scale, grading type) and categories with weights
       (validate the weights sum to 100%)
-- [ ] Assignments CRUD with due date, points possible/earned; fast keyboard entry; bulk paste
+- [x] Assignments CRUD with due date, points possible/earned; fast keyboard entry; bulk paste
       ("HW 1, 10/7, 20 pts" lines)
-- [ ] Grades page: overview card per course (current / max / min + letter) and a course detail
+- [x] Grades page: overview card per course (current / max / min + letter) and a course detail
       table
 
 **AC:** the user can enter a real UH course in under 5 minutes and see the correct current and

@@ -2,63 +2,39 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-02 (session 3: M1 done; M2 in progress)_
+_Last updated: 2026-10-03 (session 3: M1 and M2 done)_
 
 ## Where things stand
 
-- **M1 is done**, including the owner's Claude CLI spike (results under "Gotchas") and the
-  owner's OK on the grade rules (VISION decisions log, Q7).
-  - SQLite database (`school-assistant.db` in userData) with WAL, foreign keys, and our own
-    migration runner: drizzle-kit SQL embedded in the bundle, applied in one transaction,
-    tracked by `PRAGMA user_version`, newer databases refused (ADR 0008). If the database can't
-    be opened or migrated, the app shows an error screen and the file is left untouched.
-  - Typed settings (`db/settings.ts`), daily backups (`db/backup.ts`) with folder picker,
-    "Back up now", retention 14 + first of month, last success/error on the Settings page.
-  - `electron-log` daily files (`main-YYYY-MM-DD.log`, 7 kept) in `app.getPath('logs')`; IPC
-    failures and uncaught errors are logged.
-  - Core grade math (`packages/core/src/grades/course-grade.ts`): weighted and points courses,
-    optimal drop-lowest, extra credit, current/max/min, warnings. The rules are written down in
-    VISION "Grade Calc" and ARCHITECTURE "Grade math".
-  - Course / GradeCategory / Assignment tables, `GradesService`, and IPC channels
-    (`course:*`, `category:*`, `assignment:*`, `backup:*`, `app:status|open-folder|quit`).
-  - Grades page shows a temporary **debug list** of courses with current/max/min grades and an
-    "Add sample course" button; M2 replaces it.
-- Checked in a real Electron run (headless, Xvfb + Playwright): the DB file, the log file and
-  a backup file all appear; the sample course shows 88.8% / 95.97% / 40.47% (matches hand
-  math); a corrupt DB file shows the error screen and stays byte-identical.
-- The owner ran `scripts/claude-cli-spike.ps1` on the laptop; every run succeeded.
+- **M1 is done:** SQLite with our own migration runner (ADR 0008), typed settings, daily
+  backups with retention, `electron-log` files, core grade math, the owner's Claude CLI spike
+  (results under "Gotchas") and the owner's OK on the grade rules (VISION decisions log, Q7).
+- **M2 is done:** Grade Calc screens.
+  - Grades overview: one card per course (current / best / worst + letter), grouped by term.
+  - Add / edit / delete a course: name, code, term (guessed from the date), weighted or points,
+    color, letter scale (presets + editable cutoffs).
+  - Course page, all edited in place: categories (name, regular or **bonus**, weight or cap,
+    drop lowest, grade so far, a "weights add up to 100%" check) and assignments (title,
+    category, due date, score, possible, %, "dropped" tag, extra credit). Enter in a score
+    moves to the next row's score; the add row keeps the category and points; "18/20" in a
+    score sets both; a bad value reverts and shows the error in a toast. Filter by category.
+  - Bulk add: **Paste a list** (`parseAssignmentLines`, live preview with per-line errors, a
+    default category) and **Add a series** (`numberedSeries`: "Video Quiz 1…8", every N days),
+    both saved in one transaction (`assignment:create-many`).
+  - Core: bonus categories (`kind: 'bonus'`, migration `0001_category_kind`), the paste parser,
+    the series generator. The owner's HIST 4318 syllabus is a core test case.
+- **AC check (headless Electron, Xvfb + Playwright):** entering HIST 4318 from the syllabus
+  (7 categories incl. the 5-point bonus, 8 video quizzes and 13 reading responses as two series,
+  7 more by paste, 11 scores typed down the column) took 70 field entries and gave 92.81% (A-)
+  current, 103.6% best, 17.6% worst, which match the hand math and the core test; 3 responses
+  were tagged dropped; the data survived a restart; no page errors. A person typing that should
+  finish well under 5 minutes. **The owner should still try it once on the laptop.**
 
-## In progress: M2 — Courses & Grade Calc screens
+## Next session: M3 — Tasks, timer & Today list
 
-Done so far (committed, `pnpm check` green, create-course flow checked headless):
-- Core: **bonus categories** (`kind: 'bonus'`): points go straight onto the final grade, up to
-  the category's weight (the cap). This follows the owner's HIST 4318 syllabus ("5 points extra
-  credit can be added to your final grade"), which is now a core test case. Not counted in the
-  100% of weights; empty = fully open (whole cap in the max).
-- Core: `parseAssignmentLines` for bulk paste ("HW 1, 10/7, 20 pts", "Quiz 1, 9/1, 8/10 pts",
-  dates/times/categories/EC in any order; due dates come back as local parts).
-- DB migration `0001_category_kind` (hand-fixed, see gotchas), `assignment:create-many`
-  (one transaction), service palette = the form's 8 colors.
-- Renderer: `lib/dates.ts` (local date input ↔ UTC, tested across DST in America/Chicago),
-  `lib/useIpc.ts`, `components/EditableCell.tsx`, `CourseForm` (name, code, term guessed
-  from the date, grading type, color, letter scale presets + cutoff editor), Grades overview
-  (cards grouped by term), `/grades/new`, and a basic `/grades/:courseId` page (summary,
-  edit, delete; categories and assignments listed read-only). The debug list is gone.
-
-## Next session: finish M2
-
-1. Course page editing: categories table (name, regular/bonus, weight or cap, drop lowest,
-   category grade, delete, add row; total-weight check) and assignments table (inline
-   `EditableCell`s, category select, date cell that saves on blur, earned / possible, %,
-   "dropped" tag from `grade.dropped`, EC checkbox, delete; add row where Enter adds and keeps
-   category/points; Enter in an earned cell moves to the next row; filter by category).
-2. "Paste a list" panel (textarea → `parseAssignmentLines` preview with errors → default
-   category → `assignment:create-many`) and "Add a numbered series" (name, count, points,
-   category, first due date, every N days).
-3. Headless run entering HIST 4318 from the syllabus (6 categories + bonus, 8 video quizzes,
-   13 reading responses with drop 3) to check the AC: under 5 minutes, correct current and max.
-4. Docs: VISION "Grade Calc" bonus rule; ARCHITECTURE grade math + data model (`kind`);
-   ROADMAP ticks; this file.
+Start with the core/data side (Task, TimeSession, Completion tables + migration `0002`, a
+`TasksService` and IPC), then the timer (one running task, sessions survive restart,
+"I started at…" backfill), then the Today list and header widget. See ROADMAP M3 for the AC.
 
 ## Gotchas learned so far
 
@@ -71,7 +47,16 @@ Done so far (committed, `pnpm check` green, create-course flow checked headless)
   table (`no such column`), so `0001` always failed until hand-fixed. The upgrade test in
   `database.test.ts` (populated v1 → latest) catches this; extend it for each migration.
 - Renderer unit tests (`src/renderer/src/**/*.test.ts`) run in Node and are typechecked by
-  `tsconfig.node.json`; `tsconfig.web.json` excludes them.
+  `tsconfig.node.json`; `tsconfig.web.json` excludes them. Tests that depend on the time zone
+  set `process.env.TZ = 'America/Chicago'` in `beforeAll` and import the module after it.
+- **Course page edits:** every change goes through `act()` in `CoursePage.tsx` (IPC call, then
+  reload). Build patches *inside* the action (`update(id, () => ({ … }))`) so a parse error
+  shows in the toast instead of silently reverting the cell. Inputs in a table's add row use
+  the `form` attribute to reach a `<form>` placed after the table (a form can't sit in `<tbody>`).
+- Date inputs: save on blur/Enter, never on change (Chromium reports a value while the year is
+  still being typed); see `components/DateCell.tsx`.
+- Headless scripts: Playwright `fullPage` screenshots only show the viewport, because `<main>`
+  scrolls, not the window.
 - **Migrations:** after editing `src/main/db/schema.ts` run
   `pnpm --filter @sa/desktop db:generate` and commit the SQL file and `meta/`. Never edit or
   regenerate a migration once the owner has run it (from now on, `0000_init` is frozen). Biome
