@@ -5,12 +5,13 @@ import { Button } from '../../components/Button';
 import { cn } from '../../lib/cn';
 import { formatTime } from '../../lib/dates';
 import type { AgendaItem } from '../calendar/events';
+import { PlanWeekButton } from '../planner/PlanPanel';
 import { useTaskActions } from '../timer/TaskActions';
 import type { TodayAgenda } from './useTodayAgenda';
 
 function StartButton({ item, label }: { item: AgendaItem; label: string }) {
   const { start } = useTaskActions();
-  if (item.item.kind !== 'block') return null;
+  if (item.item.kind !== 'block' || item.item.block.kind === 'wait') return null;
   const { task } = item.item.block;
   if (task?.status !== 'open') return null;
   if (task.running) {
@@ -64,13 +65,17 @@ export function TodaySchedule({ agenda, now }: { agenda: TodayAgenda; now: Date 
   const { today, current, next } = agenda;
   if (today.length === 0 && !next) {
     return (
-      <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-zinc-500">
         <CalendarDays className="size-4" />
-        Nothing on the calendar today.{' '}
-        <Link to="/calendar" className="text-indigo-700 hover:underline dark:text-indigo-300">
-          Plan your day
-        </Link>
-      </p>
+        <span>
+          Nothing on the calendar today.{' '}
+          <Link to="/calendar" className="text-indigo-700 hover:underline dark:text-indigo-300">
+            Plan by hand
+          </Link>{' '}
+          or let the planner fill the week.
+        </span>
+        <PlanWeekButton />
+      </div>
     );
   }
 

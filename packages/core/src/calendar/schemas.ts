@@ -66,6 +66,13 @@ export type FixedEvent = z.infer<typeof fixedEventSchema>;
 export const blockSourceSchema = z.enum(['manual', 'planner']);
 export type BlockSource = z.infer<typeof blockSourceSchema>;
 
+/**
+ * What a block holds (M5): `work` on the task (background when the task is), a hands-on `step`
+ * of a task with steps (needs the user), or a `wait` between steps (runs alongside anything).
+ */
+export const blockKindSchema = z.enum(['work', 'step', 'wait']);
+export type BlockKind = z.infer<typeof blockKindSchema>;
+
 export const blockSchema = z.object({
   id: idSchema,
   /** The task this time is for; deleting the task deletes its blocks. */
@@ -78,6 +85,7 @@ export const blockSchema = z.object({
   locked: z.boolean(),
   /** Placed by hand, or by the planner (M5). */
   source: blockSourceSchema,
+  kind: blockKindSchema,
   /** The planner's "why here" (M5); empty for manual blocks. */
   reason: z.string(),
   createdAt: utcInstantSchema,

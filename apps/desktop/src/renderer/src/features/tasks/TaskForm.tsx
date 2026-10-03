@@ -1,16 +1,27 @@
 import {
   type Assignment,
+  DEFAULT_MIN_CHUNK_MIN,
   formatMinutes,
+  formatSteps,
   parseDuration,
+  parseSteps,
+  stepTotals,
   type Task,
   type TaskAttention,
   type TaskPriority,
+  type TaskStep,
 } from '@sa/core';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { inputClass } from '../../components/inputs';
 import { cn } from '../../lib/cn';
-import { fromDateAndTime, toDateInput, toTimeInput } from '../../lib/dates';
+import {
+  fromDateAndTime,
+  fromDateTimeInput,
+  toDateInput,
+  toDateTimeInput,
+  toTimeInput,
+} from '../../lib/dates';
 import { useIpcQuery } from '../../lib/useIpc';
 
 export interface TaskFormValues {
@@ -25,6 +36,11 @@ export interface TaskFormValues {
   dueAt: string | null;
   priority: TaskPriority;
   attention: TaskAttention;
+  earliestStartAt: string | null;
+  splittable: boolean;
+  minChunkMin: number;
+  allowLate: boolean;
+  steps: TaskStep[];
   /** Create only: also put it on the Today list. */
   today: boolean;
 }
@@ -106,6 +122,15 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'normal');
   const [attention, setAttention] = useState<TaskAttention>(task?.attention ?? 'focus');
   const [today, setToday] = useState(initial?.today ?? false);
+  const [earliestStart, setEarliestStart] = useState(
+    toDateTimeInput(task?.earliestStartAt ?? null),
+  );
+  const [oneSitting, setOneSitting] = useState(task ? !task.splittable : false);
+  const [minChunk, setMinChunk] = useState(
+    formatMinutes(task?.minChunkMin ?? DEFAULT_MIN_CHUNK_MIN),
+  );
+  const [allowLate, setAllowLate] = useState(task?.allowLate ?? false);
+  const [stepsText, setStepsText] = useState(task ? formatSteps(task.steps) : '');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   useEffect(() => {
@@ -128,6 +153,16 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
   const quantityValue = quantity.trim() === '' ? null : Number(quantity);
   const quantityError = quantityValue !== null && !(quantityValue >= 0);
   const types = [...new Set([...(usedTypes ?? []), ...DEFAULT_TYPES])];
+  const minChunkMin = parseDuration(minChunk);
+  const minChunkError = minChunkMin === null || minChunkMin < 5 || minChunkMin > 480;
+  const steps = parseSteps(stepsText);
+  const planningChanged =
+    task !== undefined &&
+    (task.earliestStartAt !== null ||
+      !task.splittable ||
+      task.minChunkMin !== DEFAULT_MIN_CHUNK_MIN ||
+      task.allowLate ||
+      task.steps.length > 0);
 
   function pickAssignment(id: string | null) {
     setAssignmentId(id);
@@ -143,7 +178,7 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (estimateError || quantityError) return;
+    if (estimateError || quantityError || minChunkError || !steps.ok) return;
     await onSubmit({
       title,
       description,
@@ -156,6 +191,11 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
       dueAt: fromDateAndTime(dueDate, dueTime),
       priority,
       attention,
+      earliestStartAt: fromDateTimeInput(earliestStart),
+      splittable: !oneSitting,
+      minChunkMin: minChunkMin ?? DEFAULT_MIN_CHUNK_MIN,
+      allowLate,
+      steps: steps.ok ? steps.steps : [],
       today,
     });
   }
@@ -299,6 +339,72 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
           <option value="background">Background (runs alongside)</option>
         </select>
       </Field>
+      <details
+        className="col-span-6 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+        open={planningChanged}
+      >
+        <summary className="cursor-pointer text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Planning
+        </summary>
+        <div className="mt-3 grid grid-cols-6 gap-4">
+          <Field label="Not before" className="col-span-3">
+            <input
+              type="datetime-local"
+              className={inputClass}
+              aria-label="Earliest start"
+              value={earliestStart}
+              onChange={(e) => setEarliestStart(e.target.value)}
+            />
+          </Field>
+          <Field label="Shortest block" className="col-span-3">
+            <input
+              className={cn(inputClass, minChunkError && 'border-red-400')}
+              aria-label="Shortest block"
+              placeholder="30m"
+              aria-invalid={minChunkError || undefined}
+              value={minChunk}
+              onChange={(e) => setMinChunk(e.target.value)}
+            />
+            {minChunkError && <span className="text-xs text-red-600">5m to 8h</span>}
+          </Field>
+          <label className="col-span-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={oneSitting}
+              onChange={(e) => setOneSitting(e.target.checked)}
+            />
+            Do it in one sitting
+          </label>
+          <label className="col-span-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={allowLate}
+              onChange={(e) => setAllowLate(e.target.checked)}
+            />
+            If it can't be done in time, plan the rest after the due date
+          </label>
+          <Field label="Steps (for tasks with waiting, like laundry)" className="col-span-6">
+            <input
+              className={cn(inputClass, !steps.ok && 'border-red-400')}
+              aria-label="Steps"
+              placeholder="Load the washer 5m, wait 45m, Move to the dryer 5m, wait 1h, Fold 15m"
+              aria-invalid={!steps.ok || undefined}
+              value={stepsText}
+              onChange={(e) => setStepsText(e.target.value)}
+            />
+            {steps.ok ? (
+              steps.steps.length > 0 && (
+                <span className="text-xs text-zinc-500">
+                  {stepsSummary(steps.steps)}. Waits run alongside other work; the planner uses the
+                  steps instead of the estimate.
+                </span>
+              )
+            ) : (
+              <span className="text-xs text-red-600">{steps.error}</span>
+            )}
+          </Field>
+        </div>
+      </details>
       <Field label="Notes" className="col-span-6">
         <textarea
           className={cn(inputClass, 'resize-y')}
@@ -322,4 +428,10 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
       </div>
     </form>
   );
+}
+
+function stepsSummary(steps: TaskStep[]): string {
+  const { handsOnMin, totalMin } = stepTotals(steps);
+  const count = steps.length === 1 ? '1 step' : `${steps.length} steps`;
+  return `${count}: ${formatMinutes(handsOnMin)} hands-on, ${formatMinutes(totalMin)} from start to finish`;
 }

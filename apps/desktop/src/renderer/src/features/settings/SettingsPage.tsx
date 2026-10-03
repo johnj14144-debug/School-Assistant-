@@ -3,6 +3,7 @@ import type { IpcOutput } from '../../../../shared/ipc';
 import { Button } from '../../components/Button';
 import { PlaceholderPage } from '../../components/PlaceholderPage';
 import { BackupSection } from './BackupSection';
+import { PlannerSection } from './PlannerSection';
 
 type AppInfo = IpcOutput<'app:info'>;
 
@@ -20,6 +21,7 @@ export function SettingsPage() {
       milestone="M3+"
     >
       <BackupSection />
+      <PlannerSection />
       <section className="mt-10">
         <h2 className="text-lg font-semibold">About</h2>
         <dl className="mt-4 grid grid-cols-[8rem_1fr] gap-y-2 text-sm">

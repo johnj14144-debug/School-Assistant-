@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { hexColorSchema, idSchema, utcInstantSchema } from '../schemas/course';
+import { taskStepsSchema } from './steps';
 
 /**
  * Tasks and timer sessions as stored by the app and passed over IPC. Instants are UTC ISO
@@ -42,6 +43,16 @@ export const taskSchema = z.object({
   attention: taskAttentionSchema,
   /** Position on the Today list; null when the task isn't on it. */
   todayOrder: z.number().int().nullable(),
+  /** The planner doesn't place work before this (M5). */
+  earliestStartAt: utcInstantSchema.nullable(),
+  /** The planner may spread the work over several blocks; false: one sitting. */
+  splittable: z.boolean(),
+  /** The shortest block worth planning for it, in minutes. */
+  minChunkMin: z.number().int().min(5).max(480),
+  /** When the work can't fit before the due date, plan the rest after it. */
+  allowLate: z.boolean(),
+  /** Hands-on steps and waits (laundry); empty for an ordinary task. */
+  steps: taskStepsSchema,
   status: taskStatusSchema,
   completedAt: utcInstantSchema.nullable(),
   /** What was done, written when finishing the task. */
@@ -111,7 +122,15 @@ const taskFields = z.object({
   dueAt: utcInstantSchema.nullable(),
   priority: taskPrioritySchema,
   attention: taskAttentionSchema,
+  earliestStartAt: utcInstantSchema.nullable(),
+  splittable: z.boolean(),
+  minChunkMin: z.number().int().min(5).max(480),
+  allowLate: z.boolean(),
+  steps: taskStepsSchema,
 });
+
+/** A new task's shortest planned block (M5). */
+export const DEFAULT_MIN_CHUNK_MIN = 30;
 
 export const taskCreateSchema = taskFields.extend({
   parentId: taskFields.shape.parentId.default(null),
@@ -127,6 +146,11 @@ export const taskCreateSchema = taskFields.extend({
   dueAt: taskFields.shape.dueAt.default(null),
   priority: taskPrioritySchema.default('normal'),
   attention: taskAttentionSchema.default('focus'),
+  earliestStartAt: taskFields.shape.earliestStartAt.default(null),
+  splittable: z.boolean().default(true),
+  minChunkMin: taskFields.shape.minChunkMin.default(DEFAULT_MIN_CHUNK_MIN),
+  allowLate: z.boolean().default(false),
+  steps: taskStepsSchema.default([]),
   /** Also put it at the end of the Today list. */
   today: z.boolean().default(false),
 });

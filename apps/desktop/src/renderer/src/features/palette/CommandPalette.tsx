@@ -146,6 +146,14 @@ export function CommandPalette() {
       run: after(() => actions.resume()),
     });
   }
+  commands.push({
+    key: 'plan-week',
+    label: 'Plan my week',
+    hint: 'time-block the next 7 days',
+    run: after(async () => {
+      if (await actions.run(() => window.api.invoke('planner:plan-week'))) navigate('/calendar');
+    }),
+  });
   for (const route of routes) {
     commands.push({
       key: `go-${route.path}`,

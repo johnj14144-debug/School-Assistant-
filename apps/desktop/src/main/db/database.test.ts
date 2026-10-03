@@ -255,3 +255,47 @@ describe('migration 0003 (calendar)', () => {
     upgraded.close();
   });
 });
+
+describe('migration 0004 (planner)', () => {
+  it('adds planner fields to tasks and blocks in a v4 database with data', () => {
+    const file = tempFile();
+    const v4 = new Database(file);
+    migrate(v4, migrations.slice(0, 4));
+    v4.exec(`
+      insert into task (id, title, estimate_min, created_at, updated_at)
+        values ('t1', 'Calc HW', 90, 'x', 'x');
+      insert into time_session (id, task_id, start_at, end_at)
+        values ('s1', 't1', '2026-10-07T15:00:00.000Z', '2026-10-07T15:30:00.000Z');
+      insert into block (id, task_id, start_at, end_at, created_at, updated_at)
+        values ('b1', 't1', '2026-10-07T15:00:00.000Z', '2026-10-07T16:00:00.000Z', 'x', 'x');
+    `);
+    v4.close();
+
+    const upgraded = openDatabase(file);
+    const { sqlite } = upgraded;
+    expect(
+      sqlite
+        .prepare(
+          'select title, estimate_min, earliest_start_at, splittable, min_chunk_min, allow_late, steps from task',
+        )
+        .get(),
+    ).toEqual({
+      title: 'Calc HW',
+      estimate_min: 90,
+      earliest_start_at: null,
+      splittable: 1,
+      min_chunk_min: 30,
+      allow_late: 0,
+      steps: '[]',
+    });
+    expect(sqlite.prepare('select kind, source from block').get()).toEqual({
+      kind: 'work',
+      source: 'manual',
+    });
+    // Links survive: the session and block still belong to the task.
+    sqlite.exec("delete from task where id = 't1'");
+    expect(sqlite.prepare('select count(*) as n from time_session').get()).toEqual({ n: 0 });
+    expect(sqlite.prepare('select count(*) as n from block').get()).toEqual({ n: 0 });
+    upgraded.close();
+  });
+});

@@ -57,6 +57,10 @@ export function TaskPage() {
     quantityText(task.quantity, task.unit),
     task.priority !== 'normal' && `${task.priority} priority`,
     task.attention !== 'focus' && task.attention,
+    task.steps.length > 0 && `${task.steps.length} steps`,
+    !task.splittable && 'one sitting',
+    task.earliestStartAt && `not before ${formatTaskDue(task.earliestStartAt, now)}`,
+    task.allowLate && 'may run late',
   ].filter(Boolean);
 
   return (

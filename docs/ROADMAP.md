@@ -92,14 +92,14 @@ app restart; backfill works; history shows estimate vs actual. **Start daily use
 **AC:** the week shows classes, sleep and meals correctly across a DST change; the user can
 plan a day by hand and run it from the Today page.
 
-## M5 — Scheduler v1: plan the week
+## M5 — Scheduler v1: plan the week ✅
 
-- [ ] Core scheduler (see ARCHITECTURE.md): least-slack-first placement into free 5-min slots,
+- [x] Core scheduler (see ARCHITECTURE.md): least-slack-first placement into free 5-min slots,
       chunking, breaks, subject interleaving; a "why here" reason on each block
-- [ ] **Laundry-style background tasks**: hands-on steps scheduled, waits overlap focus work
-- [ ] Infeasibility warnings with options
-- [ ] "Plan my week" action; blocks appear on the calendar and the Today page
-- [ ] Property-based tests with fast-check
+- [x] **Laundry-style background tasks**: hands-on steps scheduled, waits overlap focus work
+- [x] Infeasibility warnings with options
+- [x] "Plan my week" action; blocks appear on the calendar and the Today page
+- [x] Property-based tests with fast-check
 
 **AC:** given a realistic week (5 courses, 25 tasks), it plans in under 1 s, never overlaps
 focus blocks, never touches sleep, meets every feasible deadline.

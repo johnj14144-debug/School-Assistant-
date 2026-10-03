@@ -1,4 +1,4 @@
-import type { LetterScale } from '@sa/core';
+import type { LetterScale, TaskStep } from '@sa/core';
 import { sql } from 'drizzle-orm';
 import {
   type AnySQLiteColumn,
@@ -129,6 +129,14 @@ export const tasks = sqliteTable(
     completionNote: text('completion_note').notNull().default(''),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
+    // Planner fields (M5), last because ALTER TABLE appends them. No CHECKs, so the migration
+    // is plain ALTER TABLEs (no rebuild of this table); zod validates every write.
+    earliestStartAt: text('earliest_start_at'),
+    splittable: integer('splittable', { mode: 'boolean' }).notNull().default(true),
+    minChunkMin: integer('min_chunk_min').notNull().default(30),
+    allowLate: integer('allow_late', { mode: 'boolean' }).notNull().default(false),
+    /** Hands-on steps and waits, JSON `[{ title, minutes, wait }]`. */
+    steps: text('steps', { mode: 'json' }).$type<TaskStep[]>().notNull().default(sql`'[]'`),
   },
   (t) => [
     index('task_parent_idx').on(t.parentId),
@@ -217,6 +225,10 @@ export const blocks = sqliteTable(
     reason: text('reason').notNull().default(''),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
+    /** `work`, a hands-on `step` or a `wait` (M5; no CHECK, so the migration is an ALTER TABLE). */
+    kind: text('kind', { enum: ['work', 'step', 'wait'] })
+      .notNull()
+      .default('work'),
   },
   (t) => [
     index('block_task_idx').on(t.taskId),

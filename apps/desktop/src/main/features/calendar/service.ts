@@ -15,6 +15,7 @@ import {
   fixedEventProblem,
   type fixedEventSkipSchema,
   type fixedEventUpdateSchema,
+  isBackgroundBlock,
   nightsWithoutSleep,
   type Occurrence,
   type OccurrenceView,
@@ -166,11 +167,12 @@ export class CalendarService {
       startAt: normalizeInstant(input.startAt),
       endAt: normalizeInstant(input.endAt),
     };
-    this.checkBlock(fields, { overlap: true, linking: true });
+    this.checkBlock({ ...fields, kind: 'work' }, { overlap: true, linking: true });
     const stamp = this.now().toISOString();
     const block: Block = {
       ...fields,
       source: 'manual',
+      kind: 'work',
       reason: '',
       id: this.newId(),
       createdAt: stamp,
@@ -181,10 +183,13 @@ export class CalendarService {
     return block;
   }
 
-  /** Moves, resizes, relabels or (un)locks a block. */
+  /**
+   * Moves, resizes, relabels or (un)locks a block. A planner block moved by hand becomes the
+   * user's own (manual), so the next "Plan my week" keeps it where it was put.
+   */
   updateBlock({ id, ...patch }: z.output<typeof blockUpdateSchema>): Block {
     const current = this.requireBlock(id);
-    const changes = defined(patch);
+    const changes: Partial<Block> = defined(patch);
     if (changes.startAt) changes.startAt = normalizeInstant(changes.startAt);
     if (changes.endAt) changes.endAt = normalizeInstant(changes.endAt);
     const next = { ...current, ...changes };
@@ -194,6 +199,10 @@ export class CalendarService {
       next.taskId !== current.taskId;
     if (moved || next.title !== current.title) {
       this.checkBlock(next, { overlap: moved, linking: next.taskId !== current.taskId });
+    }
+    if (moved && current.source === 'planner') {
+      changes.source = 'manual';
+      changes.reason = '';
     }
     this.db
       .update(blocks)
@@ -304,7 +313,7 @@ export class CalendarService {
 
   /** A block needs a task or a title, a sane length, and no collision (core's rules). */
   private checkBlock(
-    block: Pick<Block, 'taskId' | 'title' | 'startAt' | 'endAt'> & { id?: string },
+    block: Pick<Block, 'taskId' | 'title' | 'startAt' | 'endAt' | 'kind'> & { id?: string },
     check: { overlap: boolean; linking: boolean },
   ): void {
     const task = block.taskId ? this.requireTask(block.taskId) : null;
@@ -325,7 +334,7 @@ export class CalendarService {
         id: block.id,
         startAt: block.startAt,
         endAt: block.endAt,
-        background: task?.attention === 'background',
+        background: isBackgroundBlock(block.kind, task?.attention ?? null),
       },
       this.blockSpans(others, this.tasksFor(others)),
       fixedSpans(occurrences),
@@ -368,7 +377,7 @@ export class CalendarService {
         id: b.id,
         startAt: b.startAt,
         endAt: b.endAt,
-        background: task?.attention === 'background',
+        background: isBackgroundBlock(b.kind, task?.attention ?? null),
         label: b.title || task?.title || 'Block',
       };
     });

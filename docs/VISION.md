@@ -96,6 +96,37 @@ decisions log):
 - **Today page:** "Now" and "Next up" from the calendar, with Start for a block's task; the big
   card shows the task planned for now ("Planned now") before the top of the Today list.
 
+**How the planner behaves** (chosen in M5; waiting for the owner to confirm, Q11):
+- **Plan my week** (Calendar page, Ctrl+K, or an empty Today schedule) plans from now to the
+  end of the seventh day, today included, from each task's due date and what's left of its
+  estimate (minus time logged and blocks you placed). Running it again replaces only the
+  planner's own future blocks; blocks you placed, dragged or locked stay. **Clear plan**
+  removes the planner's blocks.
+- **Earliest deadline first, as early as possible:** work goes into the first free time.
+  Nothing goes into sleep, classes, meals, routine items or other commitments.
+- **Blocks and breaks:** at most 90 minutes of focus per block, then a 10-minute break before
+  the next one (both in Settings → Planner). Each task has a shortest block (30 minutes by
+  default). Work that fits in one block isn't cut up to fill a short gap unless its deadline is
+  close. **One sitting** keeps a task in one block (a practice exam).
+- **Subjects alternate** (MATH, then CHEM, then MATH…) whenever everything due sooner still fits.
+- **No due date:** planned after all dated work, by priority, filling the rest of the week's free
+  time (monk mode).
+- **Not before:** a task can say when it may start.
+- **Laundry-style tasks:** steps typed as "Load the washer 5m, wait 45m, Move to the dryer 5m,
+  wait 1h, Fold 15m". Each hands-on step gets a short block; the waits run alongside other work
+  (and meals), never over sleep, classes or other commitments; a step after a wait comes within
+  30 minutes. The whole sequence goes on the first day it fits, next to a meal or class when it
+  can. Background tasks without steps get one block that runs alongside.
+- **Subtasks** are planned instead of their parent and inherit its due date.
+- **Not planned:** tasks without an estimate, and tasks whose estimate is used up; the plan lists
+  them so they can be fixed.
+- **When work doesn't fit** before its due date, the plan says how much is missing and offers:
+  plan the rest after the due date (remembered on the task), let a one-sitting task be split, or
+  edit the task. Overdue work gets the same offer.
+- **Why here:** every planned block explains itself ("Part 2 of 3. Due Tue, Oct 6, 11:59 PM, with
+  6h of free time to spare. A change of subject; everything due sooner still fits.").
+- If a timer is running, that task keeps the first block (unless that would miss a deadline).
+
 **Design rule: the algorithm plans and Claude advises.** Scheduling and re-planning are
 deterministic code: instant, free, predictable, testable. Claude handles the fuzzy parts:
 understanding texts, breaking work down, reading syllabi, researching goals, designing

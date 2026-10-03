@@ -1,7 +1,8 @@
+import type { TaskAttention } from '../tasks/schemas';
 import { wallMinutes } from '../time/expand';
 import { compareDates, parseLocalDate } from '../time/local-date';
 import { parseRRule } from '../time/recurrence';
-import type { FixedEventKind } from './schemas';
+import type { BlockKind, FixedEventKind } from './schemas';
 
 /**
  * Calendar rules (M4). A fixed event must make sense on its own; blocks (planned task time) may
@@ -65,6 +66,14 @@ export interface FixedSpan extends Span {
 export interface BlockConflict extends Span {
   with: 'block' | 'fixed';
   label: string;
+}
+
+/**
+ * Whether a block runs alongside other things: a wait between steps always does, a hands-on step
+ * never, and work does when its task is a background task.
+ */
+export function isBackgroundBlock(kind: BlockKind, attention: TaskAttention | null): boolean {
+  return kind === 'wait' || (kind === 'work' && attention === 'background');
 }
 
 /** Fixed events a background block may run alongside. */

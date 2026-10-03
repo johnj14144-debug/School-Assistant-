@@ -1,3 +1,4 @@
+import { planRunSchema } from '@sa/core';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Logger } from '../log';
@@ -17,6 +18,12 @@ const definitions = {
   'timer.paused': { schema: z.object({ taskId: z.uuid() }).nullable(), fallback: null },
   /** Minimum real sleep per night in minutes; 7.5 h is the owner's floor and can only go up. */
   'calendar.sleepFloorMin': { schema: z.number().int().min(450).max(720), fallback: 450 },
+  /** Longest focus block the planner makes (a one-sitting task may be longer). */
+  'planner.maxChunkMin': { schema: z.number().int().min(30).max(240), fallback: 90 },
+  /** Free minutes the planner leaves between two work blocks. */
+  'planner.breakMin': { schema: z.number().int().min(0).max(60), fallback: 10 },
+  /** The last "Plan my week": what it planned and its warnings. */
+  'planner.lastRun': { schema: planRunSchema.nullable(), fallback: null },
 } as const satisfies Record<string, { schema: z.ZodType; fallback: unknown }>;
 
 export type SettingKey = keyof typeof definitions;

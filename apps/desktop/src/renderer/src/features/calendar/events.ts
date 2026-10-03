@@ -1,5 +1,10 @@
 import type { EventInput } from '@fullcalendar/react';
-import type { BlockView, CalendarRange, OccurrenceView } from '@sa/core';
+import {
+  type BlockView,
+  type CalendarRange,
+  isBackgroundBlock,
+  type OccurrenceView,
+} from '@sa/core';
 
 /**
  * Calendar data → what FullCalendar and the Today page show. Pure, so it can be unit-tested.
@@ -22,6 +27,8 @@ export const blockEventId = (b: Pick<BlockView, 'id'>) => `${BLOCK_PREFIX}${b.id
 export function blockClassNames(block: BlockView): string {
   return [
     'sa-block',
+    block.source === 'planner' && 'sa-planner',
+    block.kind === 'wait' && 'sa-wait',
     block.locked && 'sa-locked',
     block.conflict && 'sa-conflict',
     block.task?.status === 'done' && 'sa-done',
@@ -115,7 +122,7 @@ export function agendaItems(range: CalendarRange): AgendaItem[] {
       (b): AgendaItem => ({
         key: blockEventId(b),
         kind: 'block',
-        background: b.task?.attention === 'background',
+        background: isBackgroundBlock(b.kind, b.task?.attention ?? null),
         startAt: b.startAt,
         endAt: b.endAt,
         title: b.label,
@@ -127,9 +134,14 @@ export function agendaItems(range: CalendarRange): AgendaItem[] {
   return items.sort((a, b) => a.startAt.localeCompare(b.startAt) || a.kind.localeCompare(b.kind));
 }
 
-/** The open focus task the current block is for (the Today page offers it first), or null. */
+/**
+ * The open task the current block needs the user for (the Today page offers it first), or
+ * null: not for a background block or a wait.
+ */
 export function plannedTaskId(current: AgendaItem | null): string | null {
   if (current?.item.kind !== 'block') return null;
-  const { task } = current.item.block;
-  return task && task.status === 'open' && task.attention !== 'background' ? task.id : null;
+  const { task, kind } = current.item.block;
+  return task && task.status === 'open' && !isBackgroundBlock(kind, task.attention)
+    ? task.id
+    : null;
 }

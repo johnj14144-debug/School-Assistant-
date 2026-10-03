@@ -21,6 +21,11 @@ describe('task schemas', () => {
       dueAt: null,
       priority: 'normal',
       attention: 'focus',
+      earliestStartAt: null,
+      splittable: true,
+      minChunkMin: 30,
+      allowLate: false,
+      steps: [],
       today: false,
     });
   });
@@ -35,6 +40,10 @@ describe('task schemas', () => {
     expect(() => taskCreateSchema.parse({ title: 'x', estimateMin: 1.5 })).toThrow();
     expect(() => taskCreateSchema.parse({ title: 'x', priority: 'urgent' })).toThrow();
     expect(() => taskCreateSchema.parse({ title: 'x', dueAt: '2026-10-07' })).toThrow();
+    expect(() => taskCreateSchema.parse({ title: 'x', minChunkMin: 0 })).toThrow();
+    expect(() =>
+      taskCreateSchema.parse({ title: 'x', steps: [{ title: 'Fold', minutes: 0, wait: false }] }),
+    ).toThrow();
   });
 
   it('trims the completion note', () => {

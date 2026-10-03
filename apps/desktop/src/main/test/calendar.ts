@@ -6,6 +6,7 @@ import {
 } from '@sa/core';
 import { vi } from 'vitest';
 import { CalendarService } from '../features/calendar/service';
+import { PlannerService } from '../features/planner/service';
 import { setupTasks } from './tasks';
 
 /** Task, timer and calendar services on one fresh database, with a controllable clock. */
@@ -26,5 +27,12 @@ export function setupCalendar(start = '2026-10-07T15:00:00.000Z') {
   const block = (fields: object) => calendar.createBlock(blockCreateSchema.parse(fields));
   const updateBlock = (id: string, patch: object) =>
     calendar.updateBlock(blockUpdateSchema.parse({ id, ...patch }));
-  return { ...base, calendar, calendarChange, fixed, updateFixed, block, updateBlock };
+  const planner = new PlannerService({
+    db: base.database.db,
+    settings: base.settings,
+    now: base.clock.now,
+    displayZone: () => 'America/Chicago',
+    onChange: calendarChange,
+  });
+  return { ...base, calendar, calendarChange, planner, fixed, updateFixed, block, updateBlock };
 }

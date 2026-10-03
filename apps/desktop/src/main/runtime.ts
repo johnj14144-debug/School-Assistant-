@@ -3,6 +3,7 @@ import { type AppDatabase, openDatabase } from './db/database';
 import { SettingsService } from './db/settings';
 import { CalendarService } from './features/calendar/service';
 import { GradesService } from './features/grades/service';
+import { PlannerService } from './features/planner/service';
 import { TasksService } from './features/tasks/service';
 import { TimerService } from './features/tasks/timer';
 import type { Logger } from './log';
@@ -21,6 +22,7 @@ export interface Services {
   tasks: TasksService;
   timer: TimerService;
   calendar: CalendarService;
+  planner: PlannerService;
   /** Fires after any change to tasks or the timer, so the window and tray can refresh. */
   taskChanges: ChangeSignal;
   /** Fires after any change to fixed events or blocks. */
@@ -85,6 +87,7 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
     tasks,
     timer: new TimerService({ db: database.db, settings, tasks, onChange: taskChanges.emit }),
     calendar: new CalendarService({ db: database.db, settings, onChange: calendarChanges.emit }),
+    planner: new PlannerService({ db: database.db, settings, onChange: calendarChanges.emit }),
     taskChanges,
     calendarChanges,
   };

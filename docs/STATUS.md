@@ -2,42 +2,59 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 5: M4 done)_
+_Last updated: 2026-10-03 (session 6: M5 done)_
 
 ## Where things stand
 
-- **M1–M3 are done** (database, backups, log, Grade Calc, tasks, timer, Today list). The owner
-  can use the app daily.
-- **M4 is done:** calendar and routine (ADR 0010).
-  - Core `time/`: `zone.ts` (Intl-based; `Temporal` is not in Node 22), `recurrence.ts` (RRULE
-    subset), `expand.ts` (`expandFixedEvents`, sleep-floor extension, `availability`,
-    `nightsWithoutSleep`). Core `calendar/`: schemas, `fixedEventProblem`,
-    `findBlockConflict`, `agendaNow`. DST tests cover Mar 8 / Nov 1 2026.
-  - DB: `fixed_event` and `block` (migration `0003_calendar`, plain CREATE TABLEs; upgrade test
-    v3 → latest). Setting `calendar.sleepFloorMin` (450, can only go up; no UI yet).
-  - Main: `CalendarService` + handlers (`fixed-event:*`, `block:*`, `calendar:range`), event
-    `calendar:changed`; `useLiveQuery` now reloads on it too.
-  - Renderer: Calendar page (FullCalendar 7, breezy/indigo, week/day, select → new block, drop a
-    task from the side list, drag/resize, block and occurrence dialogs, warnings), Routine page
-    (`/calendar/routine`, starter routine, form with day toggles, skipped dates), Today page
-    `TodaySchedule` (Now / Next up / today's schedule) and "Planned now" in the big card.
-  - `pnpm e2e` now has a second test: starter routine → calendar → block over now → Start from
-    Today.
-- **AC check (headless Electron, TZ=America/Chicago):** starter routine + MWF and TTh classes;
-  the week view keeps classes at 10:00 / 1:00 and sleep at 11 PM–6:30 AM around the fall-back
-  change; the Mar 14, 2027 night shows sleep extended 60 min; dragged a task in (90-min block),
-  selected 11:00–11:55 for another, a drag into lunch snapped back with "That overlaps Lunch…";
-  block dialog (Start / Lock / Delete); a block over now showed on Today as Now and Start ran
-  its timer. Dark mode checked. No page errors.
+- **M1–M4 are done** (database, backups, log, Grade Calc, tasks, timer, Today list, calendar
+  and routine). The owner can use the app daily.
+- **M5 is done:** "Plan my week" (ADR 0011).
+  - Core `scheduler/`: `grid.ts` (5-minute slots with HARD/SOFT/WORK/BUSY flags),
+    `plan.ts` (`planWeek`: steps and background tasks first, then focus work earliest deadline
+    first with chunks, breaks, interleaving, one-sitting and running-task rules, fallback runs;
+    reasons and warnings), `prepare.ts` (`preparePlan`: leaf tasks, inherited due dates, work
+    left; `planHorizon`), `schemas.ts` (`planRunSchema`, warnings and options). Core
+    `tasks/steps.ts` parses "Load the washer 5m, wait 45m, …". `isBackgroundBlock` in
+    `calendar/rules.ts`.
+  - DB: migration `0004_planner` (task `earliest_start_at`, `splittable`, `min_chunk_min`,
+    `allow_late`, `steps`; block `kind`), plain ALTER TABLEs; upgrade test v4 → latest.
+    Settings `planner.maxChunkMin` (90), `planner.breakMin` (10), `planner.lastRun`.
+  - Main: `features/planner/` (`PlannerService.planWeek/clear/lastRun/preferences`, channels
+    `planner:*`, fires `calendar:changed`). Dragging a planner block makes it manual.
+  - Renderer: Plan my week / Clear plan and the plan panel (warnings with option buttons) on
+    the Calendar page, palette command, Today's empty schedule offers it, "Why here" in the
+    block dialog, planner/wait styles, Planning section in the task form, Settings → Planner.
+  - Tests: unit scenarios, a realistic week (25 tasks in ~2 ms), fast-check properties (rules
+    for any week; deadlines met when the work clearly fits), service tests, `pnpm e2e` has a
+    third test (plan, explain, re-plan).
+- **AC check (headless Electron, TZ=America/Chicago):** starter routine + five classes +
+  tutoring, 25 tasks (homework, readings, lab report, essay, one-sitting practice exam, project,
+  laundry with steps): one click planned 50 blocks (48h 40m of work) through the 7th day with no
+  warnings, no block conflicts and nothing in sleep; the panel appeared 179 ms after the click.
+  Block dialog, Today's Now/Next, task form Planning section and dark mode checked; no page
+  errors.
 - `pnpm check` and `pnpm e2e` pass.
 
-## Next session: M5 — Scheduler v1: plan the week
+## Next session: M6 — Scheduler v1: re-planning
 
-Start in core `scheduler/` with `availability()` from `time/expand.ts` as input (locked and
-manual blocks are busy too; reuse `findBlockConflict`'s rules). Add `fast-check` for the
-property tests. Planner blocks use `source: 'planner'` and fill `reason`; see ROADMAP M5.
+Re-plan from now on a late start, an overrun, an early finish, task edits and a manual
+"Re-plan now", with a diff of what moved. Build on `planWeek`: blocks under way and the past are
+already frozen (kept); add stickiness (prefer each task's previous placements, e.g. score
+candidate slots by distance from the old block) and `planVersion` on blocks. Also decide what
+happens to a done task's future planner blocks (today they stay until the next plan).
 
 ## Gotchas learned so far
+
+- **Scheduler (M5):** `planWeek` is pure and fast; the service does all loading. Planner rules
+  must stay in step with `findBlockConflict` (the calendar flags any planner block that breaks
+  them as a conflict, and the e2e/service tests assert none do). Block background-ness is
+  `isBackgroundBlock(kind, attention)` everywhere; don't test `attention` alone. The property
+  tests take ~4 s; a one-off sweep with 13,000 runs found nothing, so a new failure there is a
+  real bug (shrink the counterexample and add a unit test).
+- **Adding columns:** `ALTER TABLE ADD` appends columns, and `database.test.ts` checks that the
+  migrated columns match `schema.ts` in order, so new columns go at the end of a table in
+  `schema.ts`. A CHECK on a new column makes drizzle-kit rebuild the table; M5 skipped CHECKs on
+  the new task/block columns for that reason (zod validates writes).
 
 - **Calendar (M4):** every block write goes through core's `findBlockConflict`; fixed events
   through `fixedEventProblem`. `range()` expands over the blocks' span too, so a block reaching
@@ -157,7 +174,14 @@ property tests. Planner blocks use `source: 'planner'` and fill `reason`; see RO
 
 ## Open questions for the user
 
-- None right now. (Q10, the calendar behavior chosen in M4, was confirmed with two changes,
-  both made: background blocks can't overlap classes or `other` commitments such as tutoring
-  and fraternity chapter, and the starter routine has two one-hour meals, breakfast 7–8 AM and
+- **Q11: the planner's behavior chosen in M5** (VISION, "How the planner behaves"). Please
+  confirm or change, especially: (a) tasks without a due date fill the rest of the week's free
+  time after dated work; (b) there is no daily limit on planned focus hours (monk mode), only
+  90-minute blocks with 10-minute breaks; would you like a daily cap?; (c) work is planned as
+  early as possible (a light week is front-loaded); (d) tasks without an estimate aren't
+  planned (listed instead) rather than given a guessed hour; (e) a laundry step may wait up to
+  30 minutes after its wait ends.
+- (Q10, the calendar behavior chosen in M4, was confirmed with two changes, both made:
+  background blocks can't overlap classes or `other` commitments such as tutoring and
+  fraternity chapter, and the starter routine has two one-hour meals, breakfast 7–8 AM and
   dinner 8–9 PM. See VISION's decisions log.)

@@ -129,6 +129,8 @@ export class TasksService {
       ...links,
       type: fields.type ?? parent?.type ?? '',
       dueAt: fields.dueAt === null ? null : normalizeInstant(fields.dueAt),
+      earliestStartAt:
+        fields.earliestStartAt === null ? null : normalizeInstant(fields.earliestStartAt),
       todayOrder: today ? this.nextTodayOrder() : null,
       status: 'open',
       completedAt: null,
@@ -163,6 +165,7 @@ export class TasksService {
       this.checkAttentionChange(task, patch.attention);
     }
     if (patch.dueAt) patch.dueAt = normalizeInstant(patch.dueAt);
+    if (patch.earliestStartAt) patch.earliestStartAt = normalizeInstant(patch.earliestStartAt);
     this.db
       .update(tasks)
       .set({ ...patch, updatedAt: this.now().toISOString() })
