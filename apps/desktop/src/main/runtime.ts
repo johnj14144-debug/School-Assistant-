@@ -2,6 +2,8 @@ import { BackupService } from './db/backup';
 import { type AppDatabase, openDatabase } from './db/database';
 import { SettingsService } from './db/settings';
 import { GradesService } from './features/grades/service';
+import { TasksService } from './features/tasks/service';
+import { TimerService } from './features/tasks/timer';
 import type { Logger } from './log';
 
 export interface AppPaths {
@@ -15,6 +17,32 @@ export interface Services {
   settings: SettingsService;
   backup: BackupService;
   grades: GradesService;
+  tasks: TasksService;
+  timer: TimerService;
+  /** Fires after any change to tasks or the timer, so the window and tray can refresh. */
+  taskChanges: ChangeSignal;
+}
+
+/** A tiny listener list. A failing listener is logged and doesn't stop the others. */
+export class ChangeSignal {
+  private readonly listeners = new Set<() => void>();
+
+  constructor(private readonly log: Logger) {}
+
+  on(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  emit = (): void => {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        this.log.error('A change listener failed', error);
+      }
+    }
+  };
 }
 
 /** Everything that depends on the database, or why it couldn't start. */
@@ -38,6 +66,8 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
     );
   }
   const settings = new SettingsService(database.db, log);
+  const taskChanges = new ChangeSignal(log);
+  const tasks = new TasksService({ db: database.db, settings, onChange: taskChanges.emit });
   const services: Services = {
     settings,
     backup: new BackupService({
@@ -47,6 +77,9 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
       log,
     }),
     grades: new GradesService({ db: database.db }),
+    tasks,
+    timer: new TimerService({ db: database.db, settings, tasks, onChange: taskChanges.emit }),
+    taskChanges,
   };
   log.info(`Database ready: ${paths.dbFile}`);
   return { ok: true, database, services };

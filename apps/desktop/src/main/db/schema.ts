@@ -1,6 +1,14 @@
 import type { LetterScale } from '@sa/core';
 import { sql } from 'drizzle-orm';
-import { check, index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+  type AnySQLiteColumn,
+  check,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+} from 'drizzle-orm/sqlite-core';
 
 /**
  * Database tables (Drizzle). After changing this file, run `pnpm --filter @sa/desktop
@@ -84,5 +92,80 @@ export const assignments = sqliteTable(
     index('assignment_due_idx').on(t.dueAt),
     check('assignment_points_possible', sql`${t.pointsPossible} >= 0`),
     check('assignment_points_earned', sql`${t.pointsEarned} is null or ${t.pointsEarned} >= 0`),
+  ],
+);
+
+export const tasks = sqliteTable(
+  'task',
+  {
+    id: text('id').primaryKey(),
+    /** A subtask's parent; deleting a task deletes its subtasks. */
+    parentId: text('parent_id').references((): AnySQLiteColumn => tasks.id, {
+      onDelete: 'cascade',
+    }),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    courseId: text('course_id').references(() => courses.id, { onDelete: 'set null' }),
+    assignmentId: text('assignment_id').references(() => assignments.id, {
+      onDelete: 'set null',
+    }),
+    type: text('type').notNull().default(''),
+    quantity: real('quantity'),
+    unit: text('unit').notNull().default(''),
+    estimateMin: integer('estimate_min'),
+    dueAt: text('due_at'),
+    priority: text('priority', { enum: ['low', 'normal', 'high'] })
+      .notNull()
+      .default('normal'),
+    attention: text('attention', { enum: ['focus', 'light', 'background'] })
+      .notNull()
+      .default('focus'),
+    /** Position on the Today list; null when not on it. */
+    todayOrder: integer('today_order'),
+    status: text('status', { enum: ['open', 'done'] })
+      .notNull()
+      .default('open'),
+    completedAt: text('completed_at'),
+    completionNote: text('completion_note').notNull().default(''),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    index('task_parent_idx').on(t.parentId),
+    index('task_course_idx').on(t.courseId),
+    index('task_assignment_idx').on(t.assignmentId),
+    index('task_status_idx').on(t.status),
+    check('task_priority', sql`${t.priority} in ('low', 'normal', 'high')`),
+    check('task_attention', sql`${t.attention} in ('focus', 'light', 'background')`),
+    check('task_status', sql`${t.status} in ('open', 'done')`),
+    check('task_completed', sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
+    check('task_quantity', sql`${t.quantity} is null or ${t.quantity} >= 0`),
+    check('task_estimate', sql`${t.estimateMin} is null or ${t.estimateMin} >= 0`),
+  ],
+);
+
+/** Timer sessions. An open session (end_at null) is a running timer; it survives restarts. */
+export const timeSessions = sqliteTable(
+  'time_session',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    startAt: text('start_at').notNull(),
+    endAt: text('end_at'),
+    source: text('source', { enum: ['desktop', 'phone', 'manual'] })
+      .notNull()
+      .default('desktop'),
+  },
+  (t) => [
+    index('time_session_task_idx').on(t.taskId),
+    index('time_session_start_idx').on(t.startAt),
+    index('time_session_open_idx').on(t.endAt),
+    check('time_session_source', sql`${t.source} in ('desktop', 'phone', 'manual')`),
+    check(
+      'time_session_order',
+      sql`${t.endAt} is null or julianday(${t.endAt}) > julianday(${t.startAt})`,
+    ),
   ],
 );

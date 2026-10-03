@@ -166,3 +166,49 @@ describe('migration 0001 (category kind)', () => {
     upgraded.close();
   });
 });
+
+describe('migration 0002 (tasks)', () => {
+  it('adds tasks and timer sessions to a v2 database with data', () => {
+    const file = tempFile();
+    const v2 = new Database(file);
+    migrate(v2, migrations.slice(0, 2));
+    v2.exec(`
+      insert into course values ('c1', 'Calc', '', '', 'enrolled', 'weighted', '[]', '#6366f1', 'x', 'x');
+      insert into assignment values ('a1', 'c1', null, 'HW 1', null, 10, null, 0, 'x', 'x');
+    `);
+    v2.close();
+
+    const upgraded = openDatabase(file);
+    const { sqlite } = upgraded;
+    sqlite.exec(`
+      insert into task (id, title, course_id, assignment_id, created_at, updated_at)
+        values ('t1', 'Do HW 1', 'c1', 'a1', 'x', 'x');
+      insert into task (id, parent_id, title, created_at, updated_at)
+        values ('t2', 't1', 'Problems 1-5', 'x', 'x');
+      insert into time_session (id, task_id, start_at, end_at)
+        values ('s1', 't2', '2026-10-07T15:00:00.000Z', '2026-10-07T15:30:00.000Z');
+    `);
+    expect(sqlite.prepare('select status, priority, attention, type from task').get()).toEqual({
+      status: 'open',
+      priority: 'normal',
+      attention: 'focus',
+      type: '',
+    });
+    // done ⇔ completed_at, and sessions end after they start.
+    expect(() => sqlite.exec("update task set status = 'done' where id = 't1'")).toThrow(/CHECK/);
+    expect(() =>
+      sqlite.exec(
+        "insert into time_session (id, task_id, start_at, end_at) values ('s2', 't1', " +
+          "'2026-10-07T15:00:00.000Z', '2026-10-07T14:00:00.000Z')",
+      ),
+    ).toThrow(/CHECK/);
+    // Deleting the assignment unlinks; deleting the parent removes subtasks and sessions.
+    sqlite.exec("delete from assignment where id = 'a1'");
+    expect(
+      sqlite.prepare('select assignment_id, course_id from task where id = ?').get('t1'),
+    ).toEqual({ assignment_id: null, course_id: 'c1' });
+    sqlite.exec("delete from task where id = 't1'");
+    expect(sqlite.prepare('select count(*) as n from time_session').get()).toEqual({ n: 0 });
+    upgraded.close();
+  });
+});

@@ -11,7 +11,20 @@ import {
   courseSummarySchema,
   courseUpdateSchema,
   gradeCategorySchema,
+  historyViewSchema,
   idSchema,
+  sessionCreateSchema,
+  sessionUpdateSchema,
+  taskCompleteSchema,
+  taskCreateSchema,
+  taskDetailSchema,
+  taskListItemSchema,
+  taskSchema,
+  taskUpdateSchema,
+  timerStateSchema,
+  timeSessionSchema,
+  todayViewSchema,
+  utcInstantSchema,
 } from '@sa/core';
 import { z } from 'zod';
 
@@ -82,6 +95,46 @@ export const ipcContract = {
   },
   'assignment:update': { input: assignmentUpdateSchema, output: assignmentSchema },
   'assignment:delete': { input: byId, output: z.void() },
+
+  // Tasks
+  'task:list': {
+    input: z.object({ status: z.enum(['open', 'done']).default('open') }).prefault({}),
+    output: z.array(taskListItemSchema),
+  },
+  'task:get': { input: byId, output: taskDetailSchema },
+  /** Task types in use, most used first (suggestions for the type field). */
+  'task:types': { input: z.void(), output: z.array(z.string()) },
+  'task:create': { input: taskCreateSchema, output: taskSchema },
+  'task:update': { input: taskUpdateSchema, output: taskSchema },
+  /** Also deletes its subtasks and timer sessions. */
+  'task:delete': { input: byId, output: z.void() },
+  /** Marks done (stopping its timers) with a note; on a done task, changes the note. */
+  'task:complete': { input: taskCompleteSchema, output: taskSchema },
+  'task:reopen': { input: byId, output: taskSchema },
+
+  // Today list
+  'today:get': { input: z.void(), output: todayViewSchema },
+  'today:set': { input: z.object({ id: idSchema, today: z.boolean() }), output: z.void() },
+  'today:reorder': { input: z.object({ ids: z.array(idSchema).max(500) }), output: z.void() },
+
+  // Timer
+  'timer:state': { input: z.void(), output: timerStateSchema },
+  /** `startAt`: "I started at…" (now when left out). */
+  'timer:start': {
+    input: z.object({ taskId: idSchema, startAt: utcInstantSchema.optional() }),
+    output: timerStateSchema,
+  },
+  'timer:pause': { input: z.void(), output: timerStateSchema },
+  'timer:resume': { input: z.void(), output: timerStateSchema },
+  /** Stops a task's timer (default: the focus task), or clears the paused task. */
+  'timer:stop': {
+    input: z.object({ taskId: idSchema.optional() }).default({}),
+    output: timerStateSchema,
+  },
+  'session:create': { input: sessionCreateSchema, output: timeSessionSchema },
+  'session:update': { input: sessionUpdateSchema, output: timerStateSchema },
+  'session:delete': { input: byId, output: z.void() },
+  'history:get': { input: z.void(), output: historyViewSchema },
 } as const;
 
 export type IpcContract = typeof ipcContract;
@@ -92,7 +145,19 @@ export type IpcInput<C extends IpcChannel> = z.input<IpcContract[C]['input']>;
 export type IpcParsedInput<C extends IpcChannel> = z.output<IpcContract[C]['input']>;
 export type IpcOutput<C extends IpcChannel> = z.output<IpcContract[C]['output']>;
 
+/**
+ * Events the main process pushes to the renderer, with their payloads. The preload script keeps
+ * its own list of these names (it can't import runtime code from here).
+ */
+export interface IpcEvents {
+  /** Tasks, the Today list or the timer changed (from any window, the tray or a timer). */
+  'tasks:changed': undefined;
+}
+export type IpcEvent = keyof IpcEvents;
+
 /** Shape of `window.api`, exposed by the preload script. */
 export interface RendererApi {
   invoke<C extends IpcChannel>(channel: C, input?: IpcInput<C>): Promise<IpcOutput<C>>;
+  /** Listens for a main-process event; returns a function that stops listening. */
+  on<E extends IpcEvent>(event: E, listener: (payload: IpcEvents[E]) => void): () => void;
 }

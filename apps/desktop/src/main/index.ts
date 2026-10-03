@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, Menu, session, shell, type Tray } from 'electron';
 import icon from '../../resources/icon.png?asset';
 import { createHandlers } from './handlers';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, sendToWindow } from './ipc';
 import { log, setupLog } from './log';
 import { type AppPaths, type Runtime, startRuntime } from './runtime';
 import { isAllowedNavigation, isSafeExternalUrl } from './security';
@@ -19,6 +19,7 @@ let tray: Tray | null = null;
 let quitting = false;
 let runtime: Runtime | null = null;
 let stopBackups: (() => void) | null = null;
+let trayTicker: ReturnType<typeof setInterval> | null = null;
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL;
 
@@ -102,6 +103,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('will-quit', () => {
     stopBackups?.();
+    if (trayTicker) clearInterval(trayTicker);
     // Closing checkpoints the WAL into the main file.
     if (runtime?.ok) runtime.database.close();
     log.info('School Assistant quit');
@@ -118,8 +120,18 @@ if (!app.requestSingleInstanceLock()) {
     runtime = startRuntime(paths, log);
     registerIpcHandlers(createHandlers(paths, runtime), log);
     mainWindow = createWindow();
-    tray = createTray(icon, showWindow);
-    if (runtime.ok) stopBackups = runtime.services.backup.startSchedule();
+    const services = runtime.ok ? runtime.services : null;
+    const trayHandle = createTray(icon, showWindow, services?.timer ?? null, log);
+    tray = trayHandle.tray;
+    if (services) {
+      stopBackups = services.backup.startSchedule();
+      services.taskChanges.on(() => {
+        sendToWindow(mainWindow, 'tasks:changed');
+        trayHandle.refresh();
+      });
+      // The tray shows the running timer's minutes.
+      trayTicker = setInterval(trayHandle.refresh, 30_000);
+    }
   });
 
   // Stay alive in the tray when every window is closed.

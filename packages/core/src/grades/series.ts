@@ -1,4 +1,4 @@
-import type { LocalDate, LocalDateTime } from './parse-assignments';
+import { addDays, type LocalDate, type LocalDateTime } from '../time/local-date';
 
 /**
  * A numbered series for Grade Calc's bulk add, e.g. "Video Quiz 1" … "Video Quiz 8", due every
@@ -25,11 +25,6 @@ export interface SeriesItem {
 }
 
 export const MAX_SERIES_COUNT = 200;
-
-function addDays(date: LocalDate, days: number): LocalDate {
-  const d = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
-}
 
 export function numberedSeries(options: SeriesOptions): SeriesItem[] {
   const name = options.name.trim();

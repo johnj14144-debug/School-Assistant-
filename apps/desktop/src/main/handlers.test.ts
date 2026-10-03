@@ -28,6 +28,8 @@ describe('createHandlers', () => {
     const handlers = createHandlers(p, runtime);
     expect(await handlers['app:status']()).toEqual({ ok: true });
     expect(await handlers['course:list']()).toEqual([]);
+    expect(await handlers['task:list']({ status: 'open' })).toEqual([]);
+    expect(await handlers['timer:state']()).toEqual({ focus: null, paused: null, background: [] });
     expect(await handlers['backup:status']()).toMatchObject({ folder: p.defaultBackupFolder });
     if (runtime.ok) runtime.database.close();
   });
