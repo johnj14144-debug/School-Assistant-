@@ -2,7 +2,7 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 6: M5 done)_
+_Last updated: 2026-10-03 (session 6: M5 done, owner's Q11 answer applied)_
 
 ## Where things stand
 
@@ -16,9 +16,16 @@ _Last updated: 2026-10-03 (session 6: M5 done)_
     left; `planHorizon`), `schemas.ts` (`planRunSchema`, warnings and options). Core
     `tasks/steps.ts` parses "Load the washer 5m, wait 45m, …". `isBackgroundBlock` in
     `calendar/rules.ts`.
-  - DB: migration `0004_planner` (task `earliest_start_at`, `splittable`, `min_chunk_min`,
-    `allow_late`, `steps`; block `kind`), plain ALTER TABLEs; upgrade test v4 → latest.
-    Settings `planner.maxChunkMin` (90), `planner.breakMin` (10), `planner.lastRun`.
+  - **Q11 answer applied:** every task has a due date, hard or soft (`task.deadline`); soft
+    deadlines may be planned past and give way to hard ones; tasks without an estimate are
+    planned for `planner.defaultEstimateMin` (60). New tasks without a date get the
+    assignment's, the parent's, or a soft one (tonight for Today, else a week out). The warning
+    option "Make the deadline soft" replaced "plan late" (`allowLate` is gone).
+  - DB: migration `0004_planner` rebuilds the task table (`due_at` NOT NULL, `deadline`,
+    `earliest_start_at`, `splittable`, `min_chunk_min`, `steps`, with CHECKs; hand-fixed copy
+    step fills missing due dates with soft ones) and adds block `kind`; upgrade test v4 →
+    latest with data, subtasks, sessions and blocks. Settings `planner.maxChunkMin` (90),
+    `planner.breakMin` (10), `planner.defaultEstimateMin` (60), `planner.lastRun`.
   - Main: `features/planner/` (`PlannerService.planWeek/clear/lastRun/preferences`, channels
     `planner:*`, fires `calendar:changed`). Dragging a planner block makes it manual.
   - Renderer: Plan my week / Clear plan and the plan panel (warnings with option buttons) on
@@ -52,9 +59,13 @@ happens to a done task's future planner blocks (today they stay until the next p
   tests take ~4 s; a one-off sweep with 13,000 runs found nothing, so a new failure there is a
   real bug (shrink the counterexample and add a unit test).
 - **Adding columns:** `ALTER TABLE ADD` appends columns, and `database.test.ts` checks that the
-  migrated columns match `schema.ts` in order, so new columns go at the end of a table in
-  `schema.ts`. A CHECK on a new column makes drizzle-kit rebuild the table; M5 skipped CHECKs on
-  the new task/block columns for that reason (zod validates writes).
+  migrated columns match `schema.ts` in order, so a column added that way goes at the end of
+  its table in `schema.ts`. A CHECK or NOT NULL change makes drizzle-kit rebuild the table, and
+  its `INSERT … SELECT` then copies new columns from the old table: hand-fix it every time
+  (0001 and 0004 both needed it). Migrations run with foreign keys off and check them before
+  commit, so rebuilding `task` keeps sessions, blocks and subtasks attached.
+- **Due dates are required (Q11):** `taskSchema.dueAt` is a string, never null; create may
+  leave it out (main fills it in). Assignments' due dates are still optional.
 
 - **Calendar (M4):** every block write goes through core's `findBlockConflict`; fixed events
   through `fixedEventProblem`. `range()` expands over the blocks' span too, so a block reaching
@@ -174,14 +185,6 @@ happens to a done task's future planner blocks (today they stay until the next p
 
 ## Open questions for the user
 
-- **Q11: the planner's behavior chosen in M5** (VISION, "How the planner behaves"). Please
-  confirm or change, especially: (a) tasks without a due date fill the rest of the week's free
-  time after dated work; (b) there is no daily limit on planned focus hours (monk mode), only
-  90-minute blocks with 10-minute breaks; would you like a daily cap?; (c) work is planned as
-  early as possible (a light week is front-loaded); (d) tasks without an estimate aren't
-  planned (listed instead) rather than given a guessed hour; (e) a laundry step may wait up to
-  30 minutes after its wait ends.
-- (Q10, the calendar behavior chosen in M4, was confirmed with two changes, both made:
-  background blocks can't overlap classes or `other` commitments such as tutoring and
-  fraternity chapter, and the starter routine has two one-hour meals, breakfast 7–8 AM and
-  dinner 8–9 PM. See VISION's decisions log.)
+- None right now. (Q11, the planner behavior chosen in M5, was confirmed with two changes, both
+  made: tasks without an estimate are planned for a default length, and every task has a hard
+  or soft due date. See VISION's decisions log.)

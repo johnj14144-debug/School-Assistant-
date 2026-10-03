@@ -1,6 +1,6 @@
 import type { BlockKind, FixedEventKind } from '../calendar/schemas';
 import { formatMinutes } from '../tasks/duration';
-import type { TaskPriority } from '../tasks/schemas';
+import type { TaskDeadline, TaskPriority } from '../tasks/schemas';
 import type { TaskStep } from '../tasks/steps';
 import { BUSY, Grid, HARD, SLOT_MIN, SLOT_MS, SOFT, WORK } from './grid';
 import type { PlanOption, PlanWarning } from './schemas';
@@ -16,9 +16,11 @@ import type { PlanOption, PlanWarning } from './schemas';
  *    When the next chunk would be the same subject as the last one, another subject goes
  *    first if everything due sooner still fits (interleaving). A one-sitting task takes a gap
  *    long enough for it when no later gap before its due date would do.
- * 3. If anything misses its due date, the plan is redone without interleaving (and then
- *    without the one-sitting and keep-going-on-the-running-task preferences); the plan with
- *    the least work missing wins. What still doesn't fit becomes a warning with options.
+ *    Hard deadlines are never planned past; soft ones may be, when there's no room before.
+ * 3. If hard work misses its due date or soft work runs late, the plan is redone without
+ *    interleaving, then without the one-sitting and running-task preferences, then with soft
+ *    deadlines yielding to hard ones; the plan with the least hard work missing (then the
+ *    least soft work late) wins. What still doesn't fit becomes a warning with options.
  *
  * Every block carries a "why here" reason.
  */
@@ -33,11 +35,14 @@ export interface PlanTask {
   background: boolean;
   /** Minutes still to plan (estimate minus time logged and blocks that stay). */
   remainingMin: number;
-  dueAt: string | null;
+  /** False when the minutes come from the default estimate (the task has none). */
+  estimated: boolean;
+  dueAt: string;
+  /** Hard: never planned past. Soft: may be, and gives way to hard deadlines. */
+  deadline: TaskDeadline;
   earliestStartAt: string | null;
   splittable: boolean;
   minChunkMin: number;
-  allowLate: boolean;
   steps: readonly TaskStep[];
   createdAt: string;
 }
@@ -135,30 +140,39 @@ export function planWeek(input: PlanInput): PlanOutcome {
   for (const task of sequences) {
     const placed = placeSequence(grid, task, settings, say);
     if (placed.kind === 'none') {
-      const dueMs = task.dueAt ? Date.parse(task.dueAt) : null;
-      if (dueMs === null || dueMs <= input.until.getTime()) {
+      if (Date.parse(task.dueAt) <= input.until.getTime()) {
         warnings.push(unplacedWarning(task, say));
       }
       continue;
     }
     blocks.push(...placed.blocks);
-    if (placed.kind === 'late') warnings.push(lateWarning(task, placed.endMs, say));
+    if (placed.kind === 'late') warnings.push(lateWarning(task, placed.endMs, 0, say));
   }
 
   // 2. Focus and light work, with fallbacks when something misses its due date.
   const focusTasks = input.tasks.filter(
     (t) => t.steps.length === 0 && !t.background && t.remainingMin > 0,
   );
+  const all = { interleave: settings.interleave, oneSitting: true, running: true };
+  const none = { interleave: false, oneSitting: false, running: false };
   const variants: Variant[] = [
-    { interleave: settings.interleave, oneSitting: true, running: true },
-    { interleave: false, oneSitting: true, running: true },
-    { interleave: false, oneSitting: false, running: false },
+    { ...all, softYield: false },
+    { ...all, interleave: false, softYield: false },
+    { ...none, softYield: false },
+    { ...all, softYield: true },
+    { ...none, softYield: true },
   ];
   let best: FocusResult | null = null;
   for (const variant of variants) {
     const result = placeFocus(grid.clone(), focusTasks, input, settings, variant);
-    if (!best || result.missing < best.missing) best = result;
-    if (best.missing === 0) break;
+    if (
+      !best ||
+      result.missing < best.missing ||
+      (result.missing === best.missing && result.late < best.late)
+    ) {
+      best = result;
+    }
+    if (best.missing === 0 && best.late === 0) break;
   }
   if (best) {
     blocks.push(...focusBlocks(best, say));
@@ -173,11 +187,7 @@ const isHard = (kind: FixedEventKind) => kind === 'sleep' || kind === 'class' ||
 const kindRank = (b: PlannedBlock) => (b.kind === 'wait' ? 1 : 0);
 
 function edfOrder(a: PlanTask, b: PlanTask): number {
-  if (a.dueAt !== b.dueAt) {
-    if (a.dueAt === null) return 1;
-    if (b.dueAt === null) return -1;
-    return a.dueAt < b.dueAt ? -1 : 1;
-  }
+  if (a.dueAt !== b.dueAt) return a.dueAt < b.dueAt ? -1 : 1;
   return (
     PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
     a.createdAt.localeCompare(b.createdAt) ||
@@ -259,7 +269,7 @@ function placeSequence(
   const release = task.earliestStartAt
     ? Math.max(0, grid.ceil(Date.parse(task.earliestStartAt)))
     : 0;
-  const dueSlot = task.dueAt ? grid.floor(Date.parse(task.dueAt)) : null;
+  const dueSlot = grid.floor(Date.parse(task.dueAt));
   const tolerance = slots(settings.stepToleranceMin);
   /** The best start on the first day that has one: least cost, then earliest. */
   const search = (limit: number): Fit | null => {
@@ -276,9 +286,9 @@ function placeSequence(
     }
     return best;
   };
-  let fit = search(dueSlot ?? Number.POSITIVE_INFINITY);
+  let fit = search(dueSlot);
   let late = false;
-  if (!fit && dueSlot !== null && task.allowLate) {
+  if (!fit && task.deadline === 'soft') {
     fit = search(Number.POSITIVE_INFINITY);
     late = fit !== null;
   }
@@ -316,17 +326,19 @@ interface Variant {
   interleave: boolean;
   oneSitting: boolean;
   running: boolean;
+  /** Soft deadlines go after every hard one. */
+  softYield: boolean;
 }
 
-type Why = 'running' | 'one-sitting' | 'switch' | 'urgent' | 'fits' | 'late' | 'undated';
+type Why = 'running' | 'one-sitting' | 'switch' | 'urgent' | 'fits' | 'late';
 
 interface Job {
   task: PlanTask;
   /** Slots left to place. */
   rem: number;
   release: number;
-  /** Work must end at or before this slot boundary; null: no due date. */
-  due: number | null;
+  /** The due date's slot boundary (negative when it has passed). */
+  due: number;
   minLen: number;
   maxLen: number;
   rank: number;
@@ -337,16 +349,20 @@ interface Chunk {
   start: number;
   len: number;
   why: Why;
-  /** Free minutes to spare before the due date when it was placed (dated tasks). */
-  spareMin: number | null;
+  /** Free minutes to spare before the due date when it was placed. */
+  spareMin: number;
+  /** A soft deadline placed after hard ones (the soft-yield fallback). */
+  yielded: boolean;
 }
 
 interface FocusResult {
   grid: Grid;
   jobs: Job[];
   chunks: Chunk[];
-  /** Slots of work that miss their due date (the variant with the fewest wins). */
+  /** Slots of hard-deadline work that miss their due date (the fewest wins). */
   missing: number;
+  /** Slots of soft-deadline work planned after (or not before) their due date (then fewest). */
+  late: number;
 }
 
 function placeFocus(
@@ -357,13 +373,17 @@ function placeFocus(
   variant: Variant,
 ): FocusResult {
   const brk = slots(settings.breakMin);
-  const jobs: Job[] = [...tasks].sort(edfOrder).map((task, rank) => {
+  const order = variant.softYield
+    ? (a: PlanTask, b: PlanTask) =>
+        Number(a.deadline === 'soft') - Number(b.deadline === 'soft') || edfOrder(a, b)
+    : edfOrder;
+  const jobs: Job[] = [...tasks].sort(order).map((task, rank) => {
     const minLen = Math.max(1, slots(task.minChunkMin));
     return {
       task,
       rem: slots(task.remainingMin),
       release: task.earliestStartAt ? Math.max(0, grid.ceil(Date.parse(task.earliestStartAt))) : 0,
-      due: task.dueAt ? grid.floor(Date.parse(task.dueAt)) : null,
+      due: grid.floor(Date.parse(task.dueAt)),
       minLen,
       maxLen: Math.max(slots(settings.maxChunkMin), minLen),
       rank,
@@ -377,7 +397,7 @@ function placeFocus(
     const hi = Math.max(lo, Math.min(grid.size, b));
     return (freePrefix[hi] ?? 0) - (freePrefix[lo] ?? 0);
   };
-  const keepsDue = (j: Job) => j.due !== null && !j.task.allowLate;
+  const keepsDue = (j: Job) => j.task.deadline === 'hard';
 
   /**
    * Whether the free time after slot `after` is too little (with a margin for breaks and short
@@ -385,7 +405,7 @@ function placeFocus(
    * next week's plan has time for it too.
    */
   const tight = (job: Job, after: number) => {
-    if (job.due === null || job.due > grid.size) return false;
+    if (job.due > grid.size) return false;
     return freeBetween(after, job.due) * EFFICIENCY < demandBy(job.due, null);
   };
 
@@ -395,7 +415,8 @@ function placeFocus(
    */
   const chunkFor = (job: Job, t: number, avail: number, runEnd: number): number => {
     if (job.rem <= 0 || job.release > t) return 0;
-    const room = keepsDue(job) ? Math.min(avail, (job.due as number) - t) : avail;
+    // Work stops at the due date; only a soft deadline's work goes on once it has passed.
+    const room = keepsDue(job) || t < job.due ? Math.min(avail, job.due - t) : avail;
     if (room <= 0) return 0;
     if (!job.task.splittable) return job.rem <= room ? job.rem : 0;
     if (job.rem <= Math.min(room, job.maxLen)) return job.rem;
@@ -407,21 +428,17 @@ function placeFocus(
     return len >= job.minLen ? len : 0;
   };
 
-  /** Dated work due at or before `due` (all of it when null), minus `except`. */
-  const demandBy = (due: number | null, except: Job | null) => {
+  /** Work due at or before `due`, minus `except`. */
+  const demandBy = (due: number, except: Job | null) => {
     let sum = 0;
-    for (const j of jobs) {
-      if (j === except || j.rem <= 0 || j.due === null) continue;
-      if (due === null || j.due <= due) sum += j.rem;
-    }
+    for (const j of jobs) if (j !== except && j.rem > 0 && j.due <= due) sum += j.rem;
     return sum;
   };
 
   /** Whether everything due before `alt` still fits if `alt` takes the time up to `from`. */
   const safeToDefer = (alt: Job, from: number) => {
     for (const k of jobs) {
-      if (k === alt || k.rem <= 0 || k.due === null) continue;
-      if (alt.due !== null && k.due >= alt.due) continue;
+      if (k === alt || k.rem <= 0 || k.due >= alt.due) continue;
       if (freeBetween(from, k.due) * EFFICIENCY < demandBy(k.due, alt)) return false;
     }
     return true;
@@ -429,7 +446,7 @@ function placeFocus(
 
   /** Whether a one-sitting job has another gap long enough after slot `after`. */
   const laterRoom = (job: Job, after: number) => {
-    const limit = keepsDue(job) ? (job.due as number) : grid.size;
+    const limit = keepsDue(job) ? job.due : grid.size;
     for (const [a, b] of runs) {
       const s = Math.max(a, after, job.release);
       if (Math.min(b, limit) - s >= job.rem) return true;
@@ -471,9 +488,9 @@ function placeFocus(
     }
     const job = first.job;
     let why: Why;
-    if (job.due !== null && t + first.len > job.due) why = 'late';
+    if (t + first.len > job.due) why = 'late';
     else if (jobs.some((j) => j.rank < job.rank && j.rem > 0 && j.release <= t)) why = 'fits';
-    else why = job.due === null ? 'undated' : 'urgent';
+    else why = 'urgent';
     return { ...first, why };
   };
 
@@ -510,10 +527,10 @@ function placeFocus(
       continue;
     }
     const { job, len, why } = pick;
-    const spareMin =
-      job.due === null ? null : (freeBetween(t, job.due) - demandBy(job.due, null)) * SLOT_MIN;
+    const spareMin = (freeBetween(t, job.due) - demandBy(job.due, null)) * SLOT_MIN;
+    const yielded = variant.softYield && job.task.deadline === 'soft';
     grid.markSlots(t, t + len, WORK);
-    chunks.push({ job, start: t, len, why, spareMin });
+    chunks.push({ job, start: t, len, why, spareMin, yielded });
     job.rem -= len;
     lastSubject = job.task.subject;
     lastWorkEnd = t + len;
@@ -522,10 +539,15 @@ function placeFocus(
 
   const untilSlot = grid.floor(input.until.getTime());
   let missing = 0;
+  let late = 0;
   for (const j of jobs) {
-    if (j.rem > 0 && keepsDue(j) && (j.due as number) <= untilSlot) missing += j.rem;
+    if (j.rem > 0 && j.due <= untilSlot) {
+      if (keepsDue(j)) missing += j.rem;
+      else late += j.rem;
+    }
   }
-  return { grid, jobs, chunks, missing };
+  for (const c of chunks) late += Math.max(0, c.start + c.len - Math.max(c.start, c.job.due));
+  return { grid, jobs, chunks, missing, late };
 }
 
 function focusBlocks(result: FocusResult, say: Wording): PlannedBlock[] {
@@ -552,17 +574,19 @@ function focusWarnings(result: FocusResult, input: PlanInput, say: Wording): Pla
   const untilMs = input.until.getTime();
   for (const job of result.jobs) {
     const { task } = job;
-    if (!task.dueAt) continue;
     const dueMs = Date.parse(task.dueAt);
-    if (task.allowLate) {
+    const minutes = job.rem * SLOT_MIN;
+    if (task.deadline === 'soft') {
       const last = result.chunks.filter((c) => c.job === job).at(-1);
       const endMs = last ? result.grid.time(last.start + last.len) : null;
-      if (endMs !== null && endMs > dueMs) warnings.push(lateWarning(task, endMs, say));
+      const unplanned = dueMs <= untilMs ? minutes : 0;
+      if (unplanned > 0 || (endMs !== null && endMs > dueMs)) {
+        warnings.push(lateWarning(task, endMs, unplanned, say));
+      }
       continue;
     }
     if (job.rem <= 0 || dueMs > untilMs) continue;
-    const minutes = job.rem * SLOT_MIN;
-    const options: PlanOption[] = ['plan-late'];
+    const options: PlanOption[] = ['make-soft'];
     if (!task.splittable) options.push('allow-split');
     options.push('edit-task');
     warnings.push(
@@ -574,7 +598,7 @@ function focusWarnings(result: FocusResult, input: PlanInput, say: Wording): Pla
             dueAt: task.dueAt,
             minutes,
             message: `${task.title} was due ${say.when(dueMs)} and has ${formatMinutes(minutes)} of work left.`,
-            options: ['plan-late', 'edit-task'],
+            options: ['make-soft', 'edit-task'],
           }
         : {
             kind: 'short',
@@ -594,28 +618,43 @@ function focusWarnings(result: FocusResult, input: PlanInput, say: Wording): Pla
 
 function unplacedWarning(task: PlanTask, say: Wording): PlanWarning {
   const what = task.steps.length > 0 ? 'Its steps don’t' : 'It doesn’t';
-  const due = task.dueAt ? ` before it's due ${say.when(Date.parse(task.dueAt))}` : ' this week';
   const minutes = task.steps.length > 0 ? sumMinutes(task.steps) : task.remainingMin;
+  const when =
+    task.deadline === 'soft' ? 'this week' : `before it's due ${say.when(Date.parse(task.dueAt))}`;
   return {
     kind: 'unplaced',
     taskId: task.id,
     title: task.title,
     dueAt: task.dueAt,
     minutes,
-    message: `${task.title} isn't planned. ${what} fit${due}: waits can't overlap sleep, classes or other commitments, and each hands-on step needs free time.`,
-    options: task.dueAt && !task.allowLate ? ['plan-late', 'edit-task'] : ['edit-task'],
+    message: `${task.title} isn't planned. ${what} fit ${when}: waits can't overlap sleep, classes or other commitments, and each hands-on step needs free time.`,
+    options: task.deadline === 'hard' ? ['make-soft', 'edit-task'] : ['edit-task'],
   };
 }
 
-function lateWarning(task: PlanTask, endMs: number, say: Wording): PlanWarning {
-  const dueMs = Date.parse(task.dueAt as string);
+/** A soft deadline the plan doesn't meet: finished after it, or with work left this week. */
+function lateWarning(
+  task: PlanTask,
+  endMs: number | null,
+  unplannedMin: number,
+  say: Wording,
+): PlanWarning {
+  const dueMs = Date.parse(task.dueAt);
+  const soft = `its soft deadline, ${say.when(dueMs)}`;
+  const message =
+    unplannedMin > 0
+      ? `${formatMinutes(unplannedMin)} of ${task.title} isn't planned this week, past ${soft}.`
+      : `${task.title} is planned to finish ${say.when(endMs ?? dueMs)}, after ${soft}.`;
   return {
     kind: 'late',
     taskId: task.id,
     title: task.title,
     dueAt: task.dueAt,
-    minutes: Math.max(0, Math.round((endMs - dueMs) / 60_000)),
-    message: `${task.title} is planned to finish ${say.when(endMs)}, after it's due ${say.when(dueMs)} (you allowed late work).`,
+    minutes:
+      unplannedMin > 0
+        ? unplannedMin
+        : Math.max(0, Math.round(((endMs ?? dueMs) - dueMs) / 60_000)),
+    message,
     options: ['edit-task'],
   };
 }
@@ -642,17 +681,22 @@ class Wording {
     return this.format.format(ms);
   }
 
+  /** "Due Tue, Oct 6, 11:59 PM", or "Soft deadline Tue, …". */
+  due(task: PlanTask): string {
+    const when = this.when(Date.parse(task.dueAt));
+    return task.deadline === 'soft' ? `Soft deadline ${when}` : `Due ${when}`;
+  }
+
   chunkReason(c: Chunk, part: number, parts: number): string {
     const { task } = c.job;
     const out: string[] = [];
     if (parts > 1) out.push(`Part ${part} of ${parts}.`);
-    if (task.dueAt) {
-      const due = `Due ${this.when(Date.parse(task.dueAt))}`;
-      if (c.why === 'late') out.push(`${due}: planned late, as you allowed.`);
-      else if (c.spareMin !== null && c.spareMin > 0) {
-        out.push(`${due}, with ${formatMinutes(c.spareMin)} of free time to spare.`);
-      } else out.push(`${due}, and time is tight.`);
-    } else if (c.why !== 'undated') out.push('No due date.');
+    const due = this.due(task);
+    if (c.why === 'late') out.push(`${due}: planned after it, as a soft deadline allows.`);
+    else if (c.spareMin > 0) {
+      out.push(`${due}, with ${formatMinutes(c.spareMin)} of free time to spare.`);
+    } else out.push(`${due}, and time is tight.`);
+    if (c.yielded) out.push('Hard deadlines come first this week.');
     switch (c.why) {
       case 'running':
         out.push("You're working on it now.");
@@ -671,13 +715,11 @@ class Wording {
       case 'fits':
         out.push('The most urgent work that fits this gap.');
         break;
-      case 'undated':
-        out.push(`No due date: planned after dated work (${task.priority} priority).`);
-        break;
       case 'late':
         break;
     }
     if (!task.splittable && c.why !== 'one-sitting') out.push('One sitting, as set on the task.');
+    if (!task.estimated) out.push("No estimate yet, so it's planned for the default length.");
     return out.join(' ');
   }
 
@@ -698,10 +740,8 @@ class Wording {
     } else {
       out.push('Background task: it runs alongside other work.');
     }
-    if (task.dueAt) {
-      const due = `Due ${this.when(Date.parse(task.dueAt))}`;
-      out.push(ctx.late ? `${due}: planned late, as you allowed.` : `${due}.`);
-    }
+    const due = this.due(task);
+    out.push(ctx.late ? `${due}: planned after it, as a soft deadline allows.` : `${due}.`);
     if (seg.kind !== 'wait') out.push('The first day it fits, where it splits free time least.');
     return out.join(' ');
   }

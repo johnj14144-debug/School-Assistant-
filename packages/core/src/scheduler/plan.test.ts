@@ -62,7 +62,7 @@ describe('planWeek', () => {
     // CHEM; the last 80 min after it.
     expect(spans(blocks)).toEqual(['Mon 8:00–9:30', 'Mon 10:50–12:00', 'Mon 12:50–14:10']);
     expect(blocks.map(minutesOf)).toEqual([90, 70, 80]);
-    expect(blocks[0]?.reason).toMatch(/^Part 1 of 3\. No due date/);
+    expect(blocks[0]?.reason).toMatch(/^Part 1 of 3\. Due Thu, Dec 31, 5:59 PM, with /);
   });
 
   it('never leaves a sliver shorter than the minimum chunk', () => {
@@ -117,7 +117,7 @@ describe('planWeek', () => {
     // 10:50–12:00 is 70 minutes: too short for the 90-minute task, long enough for the reading.
     const { blocks } = plan({ now: new Date('2026-10-05T15:50:00.000Z'), tasks: [math, reading] });
     expect(spans(blocks)).toEqual(['Mon 10:50–11:50', 'Mon 12:50–14:20']);
-    expect(blocks[0]?.reason).toBe('No due date. The most urgent work that fits this gap.');
+    expect(blocks[0]?.reason).toContain('The most urgent work that fits this gap.');
   });
 
   it('keeps going on the same subject when a deadline needs it', () => {
@@ -205,7 +205,7 @@ describe('planWeek', () => {
         dueAt: '2026-10-05T19:00:00.000Z',
         minutes: 600 - planned,
         message: "6h 10m of Lab report doesn't fit before it's due Mon, Oct 5, 2:00 PM.",
-        options: ['plan-late', 'edit-task'],
+        options: ['make-soft', 'edit-task'],
       },
     ]);
   });
@@ -218,7 +218,7 @@ describe('planWeek', () => {
     });
     const { blocks, warnings } = plan({ tasks: [exam] });
     expect(blocks).toEqual([]);
-    expect(warnings[0]?.options).toEqual(['plan-late', 'allow-split', 'edit-task']);
+    expect(warnings[0]?.options).toEqual(['make-soft', 'allow-split', 'edit-task']);
     expect(warnings[0]?.message).toContain('needs one sitting');
   });
 
@@ -231,20 +231,72 @@ describe('planWeek', () => {
         kind: 'overdue',
         minutes: 60,
         message: 'Quiz corrections was due Sun, Oct 4, 5:00 PM and has 1h of work left.',
-        options: ['plan-late', 'edit-task'],
+        options: ['make-soft', 'edit-task'],
       }),
     ]);
   });
 
-  it('plans late work right away when the task allows it', () => {
-    const old = planTask({ dueAt: '2026-10-04T22:00:00.000Z', allowLate: true });
+  it('plans work past a soft deadline right away', () => {
+    const old = planTask({
+      title: 'Read ch. 2',
+      dueAt: '2026-10-04T22:00:00.000Z',
+      deadline: 'soft',
+    });
     const later = planTask({ dueAt: '2026-10-06T22:00:00.000Z' });
     const { blocks, warnings } = plan({ tasks: [later, old] });
     expect(blocks[0]?.taskId).toBe(old.id);
-    expect(blocks[0]?.reason).toContain('planned late, as you allowed');
+    expect(blocks[0]?.reason).toBe(
+      'Soft deadline Sun, Oct 4, 5:00 PM: planned after it, as a soft deadline allows.',
+    );
     expect(warnings).toEqual([
-      expect.objectContaining({ kind: 'late', taskId: old.id, options: ['edit-task'] }),
+      {
+        kind: 'late',
+        taskId: old.id,
+        title: 'Read ch. 2',
+        dueAt: '2026-10-04T22:00:00.000Z',
+        minutes: 960,
+        message:
+          'Read ch. 2 is planned to finish Mon, Oct 5, 9:00 AM, after its soft deadline, Sun, Oct 4, 5:00 PM.',
+        options: ['edit-task'],
+      },
     ]);
+  });
+
+  it('plans a soft deadline past its date when there is no room before it', () => {
+    // Due Mon 2 PM with 10 h of work: what doesn't fit by then goes after it.
+    const reading = planTask({
+      remainingMin: 600,
+      dueAt: '2026-10-05T19:00:00.000Z',
+      deadline: 'soft',
+    });
+    const { blocks, warnings } = plan({ tasks: [reading] });
+    expect(blocks.reduce((sum, b) => sum + minutesOf(b), 0)).toBe(600);
+    expect(blocks.some((b) => ms(b.endAt) > ms('2026-10-05T19:00:00.000Z'))).toBe(true);
+    expect(warnings.map((w) => w.kind)).toEqual(['late']);
+  });
+
+  it('lets soft deadlines give way to hard ones when time is short', () => {
+    // Mon 8 AM–noon has 3 h of free time. A soft 2-hour task is due at 11 AM and a hard 2-hour
+    // task at noon: both can't be on time, so the hard one is.
+    const soft = planTask({
+      subject: 'a',
+      remainingMin: 120,
+      dueAt: '2026-10-05T16:00:00.000Z',
+      deadline: 'soft',
+    });
+    const hard = planTask({ subject: 'b', remainingMin: 120, dueAt: '2026-10-05T17:00:00.000Z' });
+    const { blocks, warnings } = plan({ tasks: [soft, hard] });
+    const hardEnd = Math.max(...blocks.filter((b) => b.taskId === hard.id).map((b) => ms(b.endAt)));
+    expect(hardEnd).toBeLessThanOrEqual(ms(hard.dueAt));
+    expect(warnings.map((w) => [w.kind, w.taskId])).toEqual([['late', soft.id]]);
+    const softBlock = blocks.find((b) => b.taskId === soft.id);
+    expect(softBlock?.reason).toContain('Hard deadlines come first this week.');
+  });
+
+  it('plans tasks without an estimate and says so', () => {
+    const task = planTask({ remainingMin: 60, estimated: false });
+    const { blocks } = plan({ tasks: [task] });
+    expect(blocks[0]?.reason).toContain("No estimate yet, so it's planned for the default length.");
   });
 
   it('gives the running task the first block', () => {
@@ -346,7 +398,7 @@ describe('planWeek', () => {
       for (const w of work) for (const s of steps) expect(overlaps(w, s)).toBe(false);
       expect(work.some((w) => mine.some((m) => m.kind === 'wait' && overlaps(w, m)))).toBe(true);
       expect(mine[2]?.reason).toBe(
-        'Hands-on step 2 of 3, after the 45m wait. The first day it fits, where it splits free time least.',
+        'Hands-on step 2 of 3, after the 45m wait. Due Thu, Dec 31, 5:59 PM. The first day it fits, where it splits free time least.',
       );
     });
 
@@ -372,7 +424,7 @@ describe('planWeek', () => {
           kind: 'unplaced',
           taskId: task.id,
           minutes: 130,
-          options: ['plan-late', 'edit-task'],
+          options: ['make-soft', 'edit-task'],
         }),
       ]);
     });

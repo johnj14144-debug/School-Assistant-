@@ -8,6 +8,7 @@ import {
   stepTotals,
   type Task,
   type TaskAttention,
+  type TaskDeadline,
   type TaskPriority,
   type TaskStep,
 } from '@sa/core';
@@ -33,13 +34,13 @@ export interface TaskFormValues {
   quantity: number | null;
   unit: string;
   estimateMin: number | null;
-  dueAt: string | null;
+  dueAt: string;
+  deadline: TaskDeadline;
   priority: TaskPriority;
   attention: TaskAttention;
   earliestStartAt: string | null;
   splittable: boolean;
   minChunkMin: number;
-  allowLate: boolean;
   steps: TaskStep[];
   /** Create only: also put it on the Today list. */
   today: boolean;
@@ -116,6 +117,9 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
     task?.estimateMin != null ? formatMinutes(task.estimateMin) : '',
   );
   const dueAt = task?.dueAt ?? initial?.dueAt ?? null;
+  const [deadline, setDeadline] = useState<TaskDeadline>(
+    task?.deadline ?? initial?.deadline ?? 'hard',
+  );
   const [dueDate, setDueDate] = useState(toDateInput(dueAt));
   const isEndOfDay = dueAt !== null && toTimeInput(dueAt) === '23:59';
   const [dueTime, setDueTime] = useState(isEndOfDay ? '' : toTimeInput(dueAt));
@@ -129,7 +133,6 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
   const [minChunk, setMinChunk] = useState(
     formatMinutes(task?.minChunkMin ?? DEFAULT_MIN_CHUNK_MIN),
   );
-  const [allowLate, setAllowLate] = useState(task?.allowLate ?? false);
   const [stepsText, setStepsText] = useState(task ? formatSteps(task.steps) : '');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
@@ -161,7 +164,6 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
     (task.earliestStartAt !== null ||
       !task.splittable ||
       task.minChunkMin !== DEFAULT_MIN_CHUNK_MIN ||
-      task.allowLate ||
       task.steps.length > 0);
 
   function pickAssignment(id: string | null) {
@@ -178,7 +180,8 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (estimateError || quantityError || minChunkError || !steps.ok) return;
+    const due = fromDateAndTime(dueDate, dueTime);
+    if (estimateError || quantityError || minChunkError || !steps.ok || !due) return;
     await onSubmit({
       title,
       description,
@@ -188,13 +191,13 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
       quantity: quantityValue,
       unit,
       estimateMin,
-      dueAt: fromDateAndTime(dueDate, dueTime),
+      dueAt: due,
+      deadline,
       priority,
       attention,
       earliestStartAt: fromDateTimeInput(earliestStart),
       splittable: !oneSitting,
       minChunkMin: minChunkMin ?? DEFAULT_MIN_CHUNK_MIN,
-      allowLate,
       steps: steps.ok ? steps.steps : [],
       today,
     });
@@ -302,6 +305,7 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
             type="date"
             className={cn(inputClass, 'min-w-0 flex-1')}
             aria-label="Due date"
+            required
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
           />
@@ -314,6 +318,16 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
             value={dueTime}
             onChange={(e) => setDueTime(e.target.value)}
           />
+          <select
+            className={cn(inputClass, 'w-20')}
+            aria-label="Deadline"
+            title="Hard: must be met; nothing is planned after it. Soft: a target that may slip when hard deadlines need the time."
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value as TaskDeadline)}
+          >
+            <option value="hard">Hard</option>
+            <option value="soft">Soft</option>
+          </select>
         </div>
       </Field>
       <Field label="Priority" className="col-span-1">
@@ -367,21 +381,13 @@ export function TaskForm({ task, initial, submitLabel, onSubmit, onCancel }: Tas
             />
             {minChunkError && <span className="text-xs text-red-600">5m to 8h</span>}
           </Field>
-          <label className="col-span-3 flex items-center gap-2 text-sm">
+          <label className="col-span-6 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={oneSitting}
               onChange={(e) => setOneSitting(e.target.checked)}
             />
             Do it in one sitting
-          </label>
-          <label className="col-span-3 flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={allowLate}
-              onChange={(e) => setAllowLate(e.target.checked)}
-            />
-            If it can't be done in time, plan the rest after the due date
           </label>
           <Field label="Steps (for tasks with waiting, like laundry)" className="col-span-6">
             <input

@@ -113,7 +113,11 @@ export const tasks = sqliteTable(
     quantity: real('quantity'),
     unit: text('unit').notNull().default(''),
     estimateMin: integer('estimate_min'),
-    dueAt: text('due_at'),
+    /** Every task has one (owner decision Q11); `deadline` says whether it can slip. */
+    dueAt: text('due_at').notNull(),
+    deadline: text('deadline', { enum: ['hard', 'soft'] })
+      .notNull()
+      .default('hard'),
     priority: text('priority', { enum: ['low', 'normal', 'high'] })
       .notNull()
       .default('normal'),
@@ -122,6 +126,12 @@ export const tasks = sqliteTable(
       .default('focus'),
     /** Position on the Today list; null when not on it. */
     todayOrder: integer('today_order'),
+    // Planner fields (M5).
+    earliestStartAt: text('earliest_start_at'),
+    splittable: integer('splittable', { mode: 'boolean' }).notNull().default(true),
+    minChunkMin: integer('min_chunk_min').notNull().default(30),
+    /** Hands-on steps and waits, JSON `[{ title, minutes, wait }]`. */
+    steps: text('steps', { mode: 'json' }).$type<TaskStep[]>().notNull().default(sql`'[]'`),
     status: text('status', { enum: ['open', 'done'] })
       .notNull()
       .default('open'),
@@ -129,14 +139,6 @@ export const tasks = sqliteTable(
     completionNote: text('completion_note').notNull().default(''),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
-    // Planner fields (M5), last because ALTER TABLE appends them. No CHECKs, so the migration
-    // is plain ALTER TABLEs (no rebuild of this table); zod validates every write.
-    earliestStartAt: text('earliest_start_at'),
-    splittable: integer('splittable', { mode: 'boolean' }).notNull().default(true),
-    minChunkMin: integer('min_chunk_min').notNull().default(30),
-    allowLate: integer('allow_late', { mode: 'boolean' }).notNull().default(false),
-    /** Hands-on steps and waits, JSON `[{ title, minutes, wait }]`. */
-    steps: text('steps', { mode: 'json' }).$type<TaskStep[]>().notNull().default(sql`'[]'`),
   },
   (t) => [
     index('task_parent_idx').on(t.parentId),
@@ -145,6 +147,8 @@ export const tasks = sqliteTable(
     index('task_status_idx').on(t.status),
     check('task_priority', sql`${t.priority} in ('low', 'normal', 'high')`),
     check('task_attention', sql`${t.attention} in ('focus', 'light', 'background')`),
+    check('task_deadline', sql`${t.deadline} in ('hard', 'soft')`),
+    check('task_min_chunk', sql`${t.minChunkMin} >= 5`),
     check('task_status', sql`${t.status} in ('open', 'done')`),
     check('task_completed', sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
     check('task_quantity', sql`${t.quantity} is null or ${t.quantity} >= 0`),

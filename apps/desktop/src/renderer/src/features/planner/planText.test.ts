@@ -21,7 +21,7 @@ const warning = (kind: PlanWarning['kind'], title: string): PlanWarning => ({
   kind,
   taskId: '00000000-0000-4000-8000-000000000001',
   title,
-  dueAt: null,
+  dueAt: '2026-10-09T04:59:00.000Z',
   minutes: 0,
   message: '',
   options: [],
@@ -48,7 +48,6 @@ describe('planner text', () => {
   it('groups warnings by what the user can do about them', () => {
     const groups = text.groupWarnings([
       warning('short', 'A'),
-      warning('no-estimate', 'B'),
       warning('late', 'C'),
       warning('overdue', 'D'),
       warning('spent', 'E'),
@@ -58,6 +57,6 @@ describe('planner text', () => {
       problems: groups.problems.map((w) => w.title),
       late: groups.late.map((w) => w.title),
       unplanned: groups.unplanned.map((w) => w.title),
-    }).toEqual({ problems: ['A', 'D', 'F'], late: ['C'], unplanned: ['B', 'E'] });
+    }).toEqual({ problems: ['A', 'D', 'F'], late: ['C'], unplanned: ['E'] });
   });
 });

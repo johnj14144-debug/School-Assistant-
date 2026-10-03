@@ -138,7 +138,7 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale (JSON), color, createdAt, updatedAt; goalId?, milestoneId?, primaryMaterialIds added in M12 | M1 |
 | GradeCategory | courseId, name, kind (`regular`/`bonus`, M2), weight (percent; a bonus category's cap in percentage points), dropLowest, position | M1 |
 | Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
-| Task | title, description, parentId? (subtasks; cascade delete), courseId? (set null), assignmentId? (set null; sets the course), type (free text), quantity+unit, estimateMin, dueAt?, priority (`low`/`normal`/`high`), attention (`focus`/`light`/`background`), todayOrder? (on the Today list when set), status (`open`/`done`), completedAt?, completionNote, createdAt, updatedAt; M5: earliestStartAt?, splittable, minChunkMin, allowLate, steps (JSON `[{title, minutes, wait}]`); unitId? in M12 | M3 |
+| Task | title, description, parentId? (subtasks; cascade delete), courseId? (set null), assignmentId? (set null; sets the course), type (free text), quantity+unit, estimateMin, dueAt (required since M5), deadline (`hard`/`soft`, M5), priority (`low`/`normal`/`high`), attention (`focus`/`light`/`background`), todayOrder? (on the Today list when set), status (`open`/`done`), completedAt?, completionNote, createdAt, updatedAt; M5: earliestStartAt?, splittable, minChunkMin, steps (JSON `[{title, minutes, wait}]`); unitId? in M12 | M3 |
 | TimeSession | taskId (cascade), startAt, endAt? (null = running), source (`desktop`/`phone`/`manual`) | M3 |
 | FixedEvent | title, kind (`class`/`sleep`/`meal`/`hygiene`/`other`), courseId? (set null), location, startDate (DTSTART, local), startLocal, endLocal (≤ start = next day), rrule? (null = once), timeZone, exceptions (skipped local dates, JSON) | M4 |
 | Block | taskId? (cascade), title, startAt, endAt, locked, source (`manual`/`planner`), reason, kind (`work`/`step`/`wait`, M5); planVersion in M6 | M4–M6 |
@@ -198,7 +198,9 @@ through `assignment:create-many` in one transaction.
   course and type unless given), an assignment link that brings its course, completion with a
   note (finishing stops the timers of the task and its subtasks), and the Today list
   (`todayOrder`; unfinished tasks stay on it until done or removed). Open tasks sort by due date,
-  then priority, then age.
+  then priority, then age. Every task has a due date, hard or soft (M5, owner decision Q11):
+  left out on create, it's the assignment's, the parent's, or a soft one (tonight for the Today
+  list, else a week out; core `defaultDue`).
 - **Timer** (`features/tasks/timer.ts`, ADR 0009): an open `time_session` is a running timer.
   One focus/light task at a time, background tasks alongside; pause remembers the task in the
   `timer.paused` setting. "I started at…" starts (or moves a running start) in the past; typed
@@ -248,28 +250,32 @@ See ADR 0010.
 See ADR 0011.
 
 - **Inputs** (`preparePlan`): open tasks with no open subtasks (subtasks take the earliest due
-  date and latest earliest start up their tree); work left = estimate − time logged (with
-  subtasks) − blocks from now on that stay. Tasks without an estimate, or with it used up, come
-  back as warnings. `planHorizon`: now → midnight after the 7th day in the laptop's zone.
+  date, with its hard/soft kind, and the latest earliest start up their tree); work left =
+  estimate (or `planner.defaultEstimateMin` when there is none) − time logged (with subtasks) −
+  blocks from now on that stay. Tasks with the estimate used up come back as warnings.
+  `planHorizon`: now → midnight after the 7th day in the laptop's zone.
   Fixed-event occurrences (sleep with its floor) and the blocks that stay (manual, locked,
   under way) with their mode (`work`, `busy`, `background`).
 - **Algorithm v1** (`planWeek`): a 5-minute slot grid with flags (`HARD` sleep/class/other,
   `SOFT` meal/routine, `WORK`, `BUSY`). (1) Tasks with steps and background tasks first: hands-on
   steps need free slots, waits may overlap anything but `HARD`, a step after a wait starts
   within 30 min; first day that fits, least-fragmenting start. (2) Focus/light work forward in
-  time, earliest deadline first (priority, age as tie-breaks; undated last), chunks of at most
+  time, earliest deadline first (priority, age as tie-breaks), chunks of at most
   `planner.maxChunkMin` and at least the task's `minChunkMin`, a `planner.breakMin` break
   between work blocks; subject interleaving when a demand check says everything due sooner
-  still fits; one-sitting tasks take the last long-enough gap; the running task first.
-  (3) If anything misses its due date, rerun with fewer preferences and keep the run with the
-  least work missing.
+  still fits; one-sitting tasks take the last long-enough gap; the running task first. Hard
+  deadlines are never planned past; soft ones are aimed for and may run past.
+  (3) If hard work misses its due date or soft work runs late, rerun with fewer preferences,
+  then with soft deadlines after hard ones, and keep the run with the least hard work missing
+  (then the least soft work late).
 - **Output:** blocks (`work`, `step`, `wait`) with a "why here" `reason`, and warnings
-  (`short`, `overdue`, `late`, `unplaced`, `no-estimate`, `spent`) with options (`plan-late`,
-  `allow-split`, `edit-task`).
+  (`short`, `overdue`, `late` for soft deadlines, `unplaced`, `spent`) with options
+  (`make-soft`, `allow-split`, `edit-task`).
 - **Main** (`features/planner/service.ts`): `planWeek()` loads everything, replaces the
   planner's own unlocked not-yet-started blocks in one transaction, stores the summary in the
   `planner.lastRun` setting and fires `calendar:changed`; `clear()`; preferences
-  (`planner.maxChunkMin` 90, `planner.breakMin` 10). Dragging a planner block makes it manual.
+  (`planner.maxChunkMin` 90, `planner.breakMin` 10, `planner.defaultEstimateMin` 60). Dragging a
+  planner block makes it manual.
   Every block's overlap rules use `isBackgroundBlock(kind, attention)`.
 - **UI:** "Plan my week" and "Clear plan" on the Calendar page with the plan panel (summary,
   warnings with option buttons, unplanned tasks), "Plan my week" in the Ctrl+K palette and on an

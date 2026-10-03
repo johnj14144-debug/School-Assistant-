@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f4b0db11-0891-4ffa-b73e-6d81299b12eb",
+  "id": "8ab9003a-fc7b-4366-9125-37202f7b5f0c",
   "prevId": "28af63d9-c2db-432e-b8ec-cce8f4b407e3",
   "tables": {
     "assignment": {
@@ -198,14 +198,6 @@
           "autoincrement": false,
           "default": "'manual'"
         },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'work'"
-        },
         "reason": {
           "name": "reason",
           "type": "text",
@@ -227,6 +219,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'work'"
         }
       },
       "indexes": {
@@ -703,8 +703,16 @@
           "name": "due_at",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
+        },
+        "deadline": {
+          "name": "deadline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'hard'"
         },
         "priority": {
           "name": "priority",
@@ -751,14 +759,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 30
-        },
-        "allow_late": {
-          "name": "allow_late",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "steps": {
           "name": "steps",
@@ -887,6 +887,14 @@
         "task_attention": {
           "name": "task_attention",
           "value": "\"task\".\"attention\" in ('focus', 'light', 'background')"
+        },
+        "task_deadline": {
+          "name": "task_deadline",
+          "value": "\"task\".\"deadline\" in ('hard', 'soft')"
+        },
+        "task_min_chunk": {
+          "name": "task_min_chunk",
+          "value": "\"task\".\"min_chunk_min\" >= 5"
         },
         "task_status": {
           "name": "task_status",

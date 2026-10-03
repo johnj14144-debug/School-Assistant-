@@ -92,9 +92,13 @@ export function TaskRow({ task, now, todayToggle = true, leading, className }: T
               {task.course.code || task.course.name}
             </span>
           )}
-          {task.dueAt && !done && (
-            <span className={cn('shrink-0', dueClass[dueStatus(task.dueAt, now)])}>
+          {!done && (
+            <span
+              className={cn('shrink-0', dueClass[dueStatus(task.dueAt, now)])}
+              title={task.deadline === 'soft' ? 'Soft deadline: may slip' : 'Hard deadline'}
+            >
               {formatTaskDue(task.dueAt, now)}
+              {task.deadline === 'soft' && ' (soft)'}
             </span>
           )}
           {details.length > 0 && <span className="truncate">{details.join(' · ')}</span>}

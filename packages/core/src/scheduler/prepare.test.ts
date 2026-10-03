@@ -14,11 +14,11 @@ function task(fields: Partial<PlannableTask> = {}): PlannableTask {
     priority: 'normal',
     attention: 'focus',
     estimateMin: 60,
-    dueAt: null,
+    dueAt: '2026-12-31T23:59:00.000Z',
+    deadline: 'hard',
     earliestStartAt: null,
     splittable: true,
     minChunkMin: 30,
-    allowLate: false,
     steps: [],
     status: 'open',
     createdAt: '2026-10-01T00:00:00.000Z',
@@ -35,6 +35,7 @@ const prepare = (
     tasks,
     actualMin: new Map(Object.entries(actual)),
     keptMin: new Map(Object.entries(kept)),
+    defaultEstimateMin: 60,
     until: UNTIL,
   });
 
@@ -60,13 +61,18 @@ describe('preparePlan', () => {
       dueAt: '2026-10-08T04:59:00.000Z',
       earliestStartAt: '2026-10-06T13:00:00.000Z',
     });
-    const a = task({ parentId: parent.id, dueAt: '2026-10-09T04:59:00.000Z' });
-    const b = task({ parentId: parent.id, earliestStartAt: '2026-10-05T13:00:00.000Z' });
+    const a = task({ parentId: parent.id, dueAt: '2026-10-09T04:59:00.000Z', deadline: 'soft' });
+    const b = task({
+      parentId: parent.id,
+      dueAt: '2026-10-07T04:59:00.000Z',
+      deadline: 'soft',
+      earliestStartAt: '2026-10-05T13:00:00.000Z',
+    });
     const doneChild = task({ parentId: a.id, status: 'done' });
     const { tasks } = prepare([parent, a, b, doneChild]);
-    expect(tasks.map((t) => [t.id, t.dueAt, t.earliestStartAt, t.subject])).toEqual([
-      [a.id, '2026-10-08T04:59:00.000Z', '2026-10-06T13:00:00.000Z', `task:${parent.id}`],
-      [b.id, '2026-10-08T04:59:00.000Z', '2026-10-06T13:00:00.000Z', `task:${parent.id}`],
+    expect(tasks.map((t) => [t.id, t.dueAt, t.deadline, t.earliestStartAt, t.subject])).toEqual([
+      [a.id, '2026-10-08T04:59:00.000Z', 'hard', '2026-10-06T13:00:00.000Z', `task:${parent.id}`],
+      [b.id, '2026-10-07T04:59:00.000Z', 'soft', '2026-10-06T13:00:00.000Z', `task:${parent.id}`],
     ]);
   });
 
@@ -77,28 +83,38 @@ describe('preparePlan', () => {
     expect(tasks.map((t) => [t.id, t.remainingMin])).toEqual([[parent.id, 120]]);
   });
 
-  it('warns about tasks without an estimate or with the estimate used up', () => {
+  it('plans tasks without an estimate for the default length', () => {
     const none = task({ title: 'Buy a calculator', estimateMin: null });
+    const { tasks, warnings } = prepare([none], { [none.id]: 15 });
+    expect(warnings).toEqual([]);
+    expect(tasks).toEqual([
+      expect.objectContaining({ id: none.id, remainingMin: 45, estimated: false }),
+    ]);
+  });
+
+  it('warns about tasks whose estimate (or the default) is used up', () => {
     const spent = task({ title: 'Calc HW', estimateMin: 60 });
+    const none = task({ title: 'Buy a calculator', estimateMin: null });
     const covered = task({ estimateMin: 60 });
     const { tasks, warnings } = prepare(
-      [none, spent, covered],
-      { [spent.id]: 75 },
+      [spent, none, covered],
+      { [spent.id]: 75, [none.id]: 90 },
       { [covered.id]: 60 },
     );
     expect(tasks).toEqual([]);
     expect(warnings).toEqual([
       expect.objectContaining({
-        kind: 'no-estimate',
-        taskId: none.id,
-        message: "Buy a calculator has no estimate, so it isn't planned.",
-        options: ['edit-task'],
-      }),
-      expect.objectContaining({
         kind: 'spent',
         taskId: spent.id,
         message:
           "Calc HW has used its 1h estimate but isn't done; raise the estimate to plan more time.",
+        options: ['edit-task'],
+      }),
+      expect.objectContaining({
+        kind: 'spent',
+        taskId: none.id,
+        message:
+          'Buy a calculator has no estimate and already has 1h 30m logged, more than the 1h default; add an estimate to plan more time.',
       }),
     ]);
   });

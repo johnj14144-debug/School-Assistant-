@@ -5,7 +5,7 @@ import { cn } from '../../lib/cn';
 import { useIpcQuery } from '../../lib/useIpc';
 import { useTaskActions } from '../timer/TaskActions';
 import { QuickAddPreview } from './QuickAddPreview';
-import { createInput, parseLine } from './quickAdd';
+import { createInput, defaultDueLabel, parseLine } from './quickAdd';
 
 interface QuickAddInputProps {
   placeholder: string;
@@ -39,7 +39,12 @@ export function QuickAddInput({ placeholder, extra, className, ...props }: Quick
         onChange={(e) => setText(e.target.value)}
       />
       {text.trim() && (
-        <QuickAddPreview parsed={parsed} courses={courses ?? []} className="mt-1.5" />
+        <QuickAddPreview
+          parsed={parsed}
+          courses={courses ?? []}
+          defaultDue={defaultDueLabel(extra ?? {})}
+          className="mt-1.5"
+        />
       )}
     </form>
   );

@@ -22,6 +22,8 @@ const definitions = {
   'planner.maxChunkMin': { schema: z.number().int().min(30).max(240), fallback: 90 },
   /** Free minutes the planner leaves between two work blocks. */
   'planner.breakMin': { schema: z.number().int().min(0).max(60), fallback: 10 },
+  /** Minutes the planner gives a task that has no estimate (owner decision Q11). */
+  'planner.defaultEstimateMin': { schema: z.number().int().min(5).max(600), fallback: 60 },
   /** The last "Plan my week": what it planned and its warnings. */
   'planner.lastRun': { schema: planRunSchema.nullable(), fallback: null },
 } as const satisfies Record<string, { schema: z.ZodType; fallback: unknown }>;

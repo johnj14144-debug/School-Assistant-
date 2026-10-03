@@ -12,6 +12,7 @@ import {
   type Task,
 } from '@sa/core';
 import { and, eq, gt, gte, inArray } from 'drizzle-orm';
+import type { PlannerPreferences } from '../../../shared/ipc';
 import type { Db } from '../../db/database';
 import { blocks, fixedEvents } from '../../db/schema';
 import type { SettingsService } from '../../db/settings';
@@ -36,7 +37,6 @@ const WARNING_ORDER: Record<PlanWarning['kind'], number> = {
   unplaced: 2,
   late: 3,
   spent: 4,
-  'no-estimate': 5,
 };
 
 /**
@@ -82,7 +82,13 @@ export class PlannerService {
       const minutes = (Date.parse(b.endAt) - start) / MINUTE_MS;
       keptMin.set(b.taskId, (keptMin.get(b.taskId) ?? 0) + minutes);
     }
-    const prepared = preparePlan({ tasks: snap.tasks, actualMin: snap.rollup, keptMin, until });
+    const prepared = preparePlan({
+      tasks: snap.tasks,
+      actualMin: snap.rollup,
+      keptMin,
+      defaultEstimateMin: settings.get('planner.defaultEstimateMin'),
+      until,
+    });
     const occurrences = expandFixedEvents(this.db.select().from(fixedEvents).all(), now, until, {
       sleepFloorMin: settings.get('calendar.sleepFloorMin'),
     });
@@ -146,7 +152,7 @@ export class PlannerService {
       warnings: [...outcome.warnings, ...prepared.warnings].sort(
         (a, b) =>
           WARNING_ORDER[a.kind] - WARNING_ORDER[b.kind] ||
-          (a.dueAt ?? '￿').localeCompare(b.dueAt ?? '￿') ||
+          a.dueAt.localeCompare(b.dueAt) ||
           a.title.localeCompare(b.title),
       ),
     };
@@ -174,18 +180,22 @@ export class PlannerService {
     return this.deps.settings.get('planner.lastRun');
   }
 
-  preferences(): { maxChunkMin: number; breakMin: number } {
+  preferences(): PlannerPreferences {
+    const { settings } = this.deps;
     return {
-      maxChunkMin: this.deps.settings.get('planner.maxChunkMin'),
-      breakMin: this.deps.settings.get('planner.breakMin'),
+      maxChunkMin: settings.get('planner.maxChunkMin'),
+      breakMin: settings.get('planner.breakMin'),
+      defaultEstimateMin: settings.get('planner.defaultEstimateMin'),
     };
   }
 
-  setPreferences(prefs: { maxChunkMin?: number; breakMin?: number }) {
-    if (prefs.maxChunkMin !== undefined) {
-      this.deps.settings.set('planner.maxChunkMin', prefs.maxChunkMin);
+  setPreferences(prefs: Partial<PlannerPreferences>): PlannerPreferences {
+    const { settings } = this.deps;
+    if (prefs.maxChunkMin !== undefined) settings.set('planner.maxChunkMin', prefs.maxChunkMin);
+    if (prefs.breakMin !== undefined) settings.set('planner.breakMin', prefs.breakMin);
+    if (prefs.defaultEstimateMin !== undefined) {
+      settings.set('planner.defaultEstimateMin', prefs.defaultEstimateMin);
     }
-    if (prefs.breakMin !== undefined) this.deps.settings.set('planner.breakMin', prefs.breakMin);
     return this.preferences();
   }
 }

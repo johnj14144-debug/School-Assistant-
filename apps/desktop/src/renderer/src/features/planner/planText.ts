@@ -22,17 +22,17 @@ export function plannedAt(run: PlanRun, now: Date): string {
 }
 
 export const OPTION_LABELS: Record<PlanOption, string> = {
-  'plan-late': 'Plan the rest after the due date',
+  'make-soft': 'Make the deadline soft',
   'allow-split': 'Let it be split',
   'edit-task': 'Edit task',
 };
 
 export interface WarningGroups {
-  /** Work that misses its due date or fits nowhere. */
+  /** Work that misses a hard due date or fits nowhere. */
   problems: PlanWarning[];
-  /** Planned after the due date, as the task allows. */
+  /** Soft deadlines the plan doesn't meet. */
   late: PlanWarning[];
-  /** Not planned: no estimate, or the estimate is used up. */
+  /** Not planned: the estimate is used up. */
   unplanned: PlanWarning[];
 }
 
@@ -40,7 +40,7 @@ export function groupWarnings(warnings: readonly PlanWarning[]): WarningGroups {
   const groups: WarningGroups = { problems: [], late: [], unplanned: [] };
   for (const w of warnings) {
     if (w.kind === 'late') groups.late.push(w);
-    else if (w.kind === 'no-estimate' || w.kind === 'spent') groups.unplanned.push(w);
+    else if (w.kind === 'spent') groups.unplanned.push(w);
     else groups.problems.push(w);
   }
   return groups;

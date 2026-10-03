@@ -54,6 +54,8 @@ export const plannerPreferencesSchema = z.object({
   maxChunkMin: z.number().int().min(30).max(240),
   /** Free minutes between two work blocks. */
   breakMin: z.number().int().min(0).max(60),
+  /** Minutes planned for a task without an estimate. */
+  defaultEstimateMin: z.number().int().min(5).max(600),
 });
 export type PlannerPreferences = z.infer<typeof plannerPreferencesSchema>;
 

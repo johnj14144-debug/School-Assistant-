@@ -181,10 +181,10 @@ describe('migration 0002 (tasks)', () => {
     const upgraded = openDatabase(file);
     const { sqlite } = upgraded;
     sqlite.exec(`
-      insert into task (id, title, course_id, assignment_id, created_at, updated_at)
-        values ('t1', 'Do HW 1', 'c1', 'a1', 'x', 'x');
-      insert into task (id, parent_id, title, created_at, updated_at)
-        values ('t2', 't1', 'Problems 1-5', 'x', 'x');
+      insert into task (id, title, course_id, assignment_id, due_at, created_at, updated_at)
+        values ('t1', 'Do HW 1', 'c1', 'a1', 'x', 'x', 'x');
+      insert into task (id, parent_id, title, due_at, created_at, updated_at)
+        values ('t2', 't1', 'Problems 1-5', 'x', 'x', 'x');
       insert into time_session (id, task_id, start_at, end_at)
         values ('s1', 't2', '2026-10-07T15:00:00.000Z', '2026-10-07T15:30:00.000Z');
     `);
@@ -257,43 +257,62 @@ describe('migration 0003 (calendar)', () => {
 });
 
 describe('migration 0004 (planner)', () => {
-  it('adds planner fields to tasks and blocks in a v4 database with data', () => {
+  it('gives every task a due date and planner fields, keeping its links', () => {
     const file = tempFile();
     const v4 = new Database(file);
     migrate(v4, migrations.slice(0, 4));
     v4.exec(`
-      insert into task (id, title, estimate_min, created_at, updated_at)
-        values ('t1', 'Calc HW', 90, 'x', 'x');
+      insert into task (id, title, estimate_min, due_at, created_at, updated_at)
+        values ('t1', 'Calc HW', 90, '2026-10-08T04:59:00.000Z', 'x', 'x');
+      insert into task (id, parent_id, title, created_at, updated_at)
+        values ('t2', 't1', 'Problems 1-5', 'x', 'x');
+      insert into task (id, title, status, completed_at, created_at, updated_at)
+        values ('t3', 'Old chore', 'done', '2026-09-01T12:00:00.000Z', 'x', 'x');
       insert into time_session (id, task_id, start_at, end_at)
-        values ('s1', 't1', '2026-10-07T15:00:00.000Z', '2026-10-07T15:30:00.000Z');
+        values ('s1', 't2', '2026-10-07T15:00:00.000Z', '2026-10-07T15:30:00.000Z');
       insert into block (id, task_id, start_at, end_at, created_at, updated_at)
-        values ('b1', 't1', '2026-10-07T15:00:00.000Z', '2026-10-07T16:00:00.000Z', 'x', 'x');
+        values ('b1', 't2', '2026-10-07T15:00:00.000Z', '2026-10-07T16:00:00.000Z', 'x', 'x');
     `);
     v4.close();
 
+    const before = Date.now();
     const upgraded = openDatabase(file);
     const { sqlite } = upgraded;
-    expect(
-      sqlite
-        .prepare(
-          'select title, estimate_min, earliest_start_at, splittable, min_chunk_min, allow_late, steps from task',
-        )
-        .get(),
-    ).toEqual({
-      title: 'Calc HW',
-      estimate_min: 90,
+    const rows = sqlite
+      .prepare(
+        'select id, due_at, deadline, earliest_start_at, splittable, min_chunk_min, steps from task order by id',
+      )
+      .all() as { id: string; due_at: string }[];
+    expect(rows[0]).toEqual({
+      id: 't1',
+      due_at: '2026-10-08T04:59:00.000Z',
+      deadline: 'hard',
       earliest_start_at: null,
       splittable: 1,
       min_chunk_min: 30,
-      allow_late: 0,
       steps: '[]',
+    });
+    // An open task without a due date: a soft deadline 7–8 days out, in the stored format.
+    expect(rows[1]).toMatchObject({ id: 't2', deadline: 'soft' });
+    const due = rows[1]?.due_at ?? '';
+    expect(due).toBe(new Date(due).toISOString());
+    expect(Date.parse(due) - before).toBeGreaterThan(6 * 86_400_000);
+    expect(Date.parse(due) - before).toBeLessThan(8 * 86_400_000);
+    // A finished one: its completion time.
+    expect(rows[2]).toMatchObject({
+      id: 't3',
+      due_at: '2026-09-01T12:00:00.000Z',
+      deadline: 'soft',
     });
     expect(sqlite.prepare('select kind, source from block').get()).toEqual({
       kind: 'work',
       source: 'manual',
     });
-    // Links survive: the session and block still belong to the task.
+    expect(() => sqlite.exec("update task set deadline = 'firm'")).toThrow(/CHECK/);
+    expect(() => sqlite.exec("update task set due_at = null where id = 't1'")).toThrow(/NOT NULL/);
+    // Links survive the rebuild: deleting the parent removes the subtask, its session and block.
     sqlite.exec("delete from task where id = 't1'");
+    expect(sqlite.prepare('select id from task').all()).toEqual([{ id: 't3' }]);
     expect(sqlite.prepare('select count(*) as n from time_session').get()).toEqual({ n: 0 });
     expect(sqlite.prepare('select count(*) as n from block').get()).toEqual({ n: 0 });
     upgraded.close();

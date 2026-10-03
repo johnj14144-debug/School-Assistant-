@@ -48,11 +48,12 @@ interface Scenario {
   kept: { offsetMin: number; lengthMin: number; mode: PlanKept['mode'] }[];
   tasks: {
     remainingMin: number;
-    dueOffsetMin: number | null;
+    dueOffsetMin: number;
+    deadline: PlanTask['deadline'];
+    estimated: boolean;
     startOffsetMin: number | null;
     splittable: boolean;
     minChunkMin: number;
-    allowLate: boolean;
     priority: PlanTask['priority'];
     subject: number;
     kind: 'focus' | 'background' | 'steps';
@@ -63,11 +64,12 @@ interface Scenario {
 
 const taskArb = fc.record({
   remainingMin: fc.integer({ min: 1, max: 400 }),
-  dueOffsetMin: fc.option(fc.integer({ min: -24 * 60, max: 4 * 24 * 60 }), { nil: null }),
+  dueOffsetMin: fc.integer({ min: -24 * 60, max: 6 * 24 * 60 }),
+  deadline: fc.constantFrom('hard', 'soft') as fc.Arbitrary<PlanTask['deadline']>,
+  estimated: fc.boolean(),
   startOffsetMin: fc.option(fc.integer({ min: -60, max: 3 * 24 * 60 }), { nil: null }),
   splittable: fc.constantFrom(true, true, true, false),
   minChunkMin: fc.integer({ min: 1, max: 18 }).map((n) => n * 5),
-  allowLate: fc.boolean(),
   priority: fc.constantFrom('low', 'normal', 'high') as fc.Arbitrary<PlanTask['priority']>,
   subject: fc.integer({ min: 0, max: 4 }),
   kind: fc.constantFrom('focus', 'focus', 'focus', 'focus', 'background', 'steps') as fc.Arbitrary<
@@ -115,11 +117,12 @@ function inputOf(s: Scenario): PlanInput {
       priority: t.priority,
       background: t.kind === 'background',
       remainingMin: t.remainingMin,
-      dueAt: t.dueOffsetMin === null ? null : iso(s.now + t.dueOffsetMin * MIN),
+      dueAt: iso(s.now + t.dueOffsetMin * MIN),
+      deadline: t.deadline,
+      estimated: t.estimated,
       earliestStartAt: t.startOffsetMin === null ? null : iso(s.now + t.startOffsetMin * MIN),
       splittable: t.splittable,
       minChunkMin: t.minChunkMin,
-      allowLate: t.allowLate,
       steps:
         t.kind === 'steps'
           ? t.steps.map((st, j) => ({ title: `step ${j}`, minutes: st.minutes, wait: st.wait }))
@@ -155,7 +158,7 @@ function checkRules(input: PlanInput, out: PlanOutcome): void {
     expect((s - from) % (5 * MIN)).toBe(0);
     expect((e - from) % (5 * MIN)).toBe(0);
     if (task.earliestStartAt) expect(s).toBeGreaterThanOrEqual(ms(task.earliestStartAt));
-    if (task.dueAt && !task.allowLate) expect(e).toBeLessThanOrEqual(ms(task.dueAt));
+    if (task.deadline === 'hard') expect(e).toBeLessThanOrEqual(ms(task.dueAt));
     // Never in sleep, classes or other commitments; hands-on time never over any fixed event.
     const wait = isWait(b, task);
     for (const f of input.fixed) {
@@ -262,7 +265,8 @@ describe('planWeek properties', () => {
   it('meets every deadline when the work clearly fits', () => {
     const focusArb = fc.record({
       remainingMin: fc.integer({ min: 5, max: 180 }),
-      dueOffsetMin: fc.option(fc.integer({ min: 120, max: 3 * 24 * 60 }), { nil: null }),
+      dueOffsetMin: fc.integer({ min: 120, max: 4 * 24 * 60 }),
+      deadline: fc.constantFrom('hard', 'soft') as fc.Arbitrary<PlanTask['deadline']>,
       minChunkMin: fc.integer({ min: 1, max: 12 }).map((n) => n * 5),
       priority: fc.constantFrom('low', 'normal', 'high') as fc.Arbitrary<PlanTask['priority']>,
       subject: fc.integer({ min: 0, max: 4 }),
@@ -285,7 +289,7 @@ describe('planWeek properties', () => {
             ...t,
             startOffsetMin: null,
             splittable: true,
-            allowLate: false,
+            estimated: true,
             kind: 'focus',
             steps: [],
           })),
@@ -294,7 +298,7 @@ describe('planWeek properties', () => {
         checked++;
         const out = planWeek(input);
         checkRules(input, out);
-        expect(out.warnings.filter((w) => w.kind === 'short')).toEqual([]);
+        expect(out.warnings.filter((w) => w.kind === 'short' || w.kind === 'late')).toEqual([]);
       }),
       { numRuns: 1000 },
     );
@@ -326,11 +330,11 @@ function clearlyFits(input: PlanInput): boolean {
     }
     return total;
   };
-  const dated = input.tasks.filter((t) => t.dueAt && ms(t.dueAt) <= input.until.getTime());
+  const dated = input.tasks.filter((t) => ms(t.dueAt) <= input.until.getTime());
   return dated.every((t) => {
-    const due = ms(t.dueAt as string);
+    const due = ms(t.dueAt);
     const demand = dated
-      .filter((u) => ms(u.dueAt as string) <= due)
+      .filter((u) => ms(u.dueAt) <= due)
       .reduce((sum, u) => sum + ceil5(u.remainingMin) * MIN, 0);
     return demand <= 0.4 * usableBefore(due);
   });

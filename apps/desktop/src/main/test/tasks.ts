@@ -34,8 +34,10 @@ export function setupTasks(start = '2026-10-07T15:00:00.000Z', file = ':memory:'
     tasks.complete(taskCompleteSchema.parse({ id, note }));
   const course = (name: string, code = '') =>
     grades.createCourse(courseCreateSchema.parse({ name, code }));
-  const assignment = (courseId: string, title: string) =>
-    grades.createAssignment(assignmentCreateSchema.parse({ courseId, title, pointsPossible: 10 }));
+  const assignment = (courseId: string, title: string, extra: object = {}) =>
+    grades.createAssignment(
+      assignmentCreateSchema.parse({ courseId, title, pointsPossible: 10, ...extra }),
+    );
   return {
     clock,
     database,

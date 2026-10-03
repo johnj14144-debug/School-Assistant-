@@ -23,8 +23,7 @@ meaning and a fallback.
   fewest free slots right beside its steps (so steps sit next to meals and classes and free
   time stays in one piece).
 - **Focus work forward in time, earliest deadline first** (`placeFocus`). At each free gap the
-  earliest-due task that fits goes in (ties: priority, then age); undated work comes after all
-  dated work. Chunks are at most `planner.maxChunkMin` (90) and at least the task's
+  earliest-due task that fits goes in (ties: priority, then age). Chunks are at most `planner.maxChunkMin` (90) and at least the task's
   `minChunkMin` (30), never leave a remainder shorter than that, and a work block is followed
   by `planner.breakMin` (10) before the next one, including blocks the user placed. Work that
   fits in one block is not cut up to fill a short gap unless its deadline is tight.
@@ -36,26 +35,36 @@ meaning and a fallback.
     before its due date would do.
   - **The running task** keeps the first block if it has work left.
 - **Fallbacks:** if any work misses its due date, the focus pass is rerun without interleaving,
-  then also without the one-sitting and running-task preferences; the run with the fewest
-  missing minutes wins. So interleaving never costs a deadline that plain EDF meets.
-- **Honest output.** Every block has a "why here" reason; work that can't fit before its due
-  date (or is overdue, or fits nowhere) becomes a warning with options: plan the rest after the
-  due date (the task's `allowLate`), let it be split, edit the task. Tasks without an estimate
-  or with the estimate used up are listed, not guessed.
+  then also without the one-sitting and running-task preferences, then with soft deadlines
+  after hard ones; the run with the fewest hard minutes missing (then soft minutes late) wins.
+  So interleaving never costs a deadline that plain EDF meets.
+- **Hard and soft deadlines** (owner decision Q11: every task has a due date). Hard work is
+  never placed after its due date. Soft work is capped at its due date while there's time
+  before it, then may continue after it. A fifth fallback run orders every soft deadline after
+  the hard ones; runs are compared by hard work missing, then soft work late.
+- **Tasks without an estimate are planned** for `planner.defaultEstimateMin` (60) minus time
+  logged (Q11); their reasons say so.
+- **Honest output.** Every block has a "why here" reason; hard work that can't fit before its
+  due date (or is overdue, or fits nowhere) becomes a warning with options: make the deadline
+  soft, let it be split, edit the task. Unmet soft deadlines are listed with when the work will
+  be done; tasks whose estimate is used up are listed, not guessed.
 - **What a run replaces:** only the planner's own unlocked blocks that haven't started. Manual
   and locked blocks and blocks under way stay and count as planned time for their task. A
   planner block the user drags becomes manual. Re-planning on events and stickiness are M6.
-- **Storage:** tasks gain `earliest_start_at`, `splittable`, `min_chunk_min`, `allow_late` and
-  `steps` (JSON); blocks gain `kind` (`work`/`step`/`wait`). They are plain `ALTER TABLE ADD`
-  columns without CHECKs (zod validates writes), appended at the end of each table, so
-  migration 0004 doesn't rebuild the task table. `isBackgroundBlock(kind, attention)` decides
-  overlap rules for every block. The last run's summary and warnings are the
-  `planner.lastRun` setting.
+- **Storage:** migration 0004 rebuilds the task table: `due_at` becomes NOT NULL, with
+  `deadline` (`hard`/`soft`), `earliest_start_at`, `splittable`, `min_chunk_min` and `steps`
+  (JSON). Existing tasks keep their due dates as hard ones; a task without one gets a soft
+  deadline (its completion time if done, else 11:59 PM local a week after the upgrade). Blocks
+  gain `kind` (`work`/`step`/`wait`) by `ALTER TABLE`. A new task without a due date gets the
+  assignment's, the parent's, or a soft default (tonight for the Today list, else a week out).
+  `isBackgroundBlock(kind, attention)` decides overlap rules for every block. The last run's
+  summary and warnings are the `planner.lastRun` setting.
 - **Tested with fast-check:** for random weeks (routine subsets, kept blocks, up to 14 tasks of
-  every kind, random settings, across the November change) every plan keeps the rules (grid,
-  no hands-on overlap, nothing in sleep/class/other, breaks, chunk sizes, earliest starts, due
-  dates, steps in order); and whenever the work due by each deadline is at most 40% of the free
-  time before it (minus what chunking can lose per gap), no deadline is missed.
+  every kind and both deadline kinds, random settings, across the November change) every plan
+  keeps the rules (grid, no hands-on overlap, nothing in sleep/class/other, breaks, chunk
+  sizes, earliest starts, hard due dates, steps in order); and whenever the work due by each
+  deadline is at most 40% of the free time before it (minus what chunking can lose per gap), no
+  deadline, hard or soft, is missed.
 
 ## Consequences
 - A realistic week plans in about 2 ms, so M6 can re-plan on every event without a worker.
@@ -63,7 +72,6 @@ meaning and a fallback.
   can still show a shortfall warning that a cleverer packing would avoid. The warning names the
   minutes and offers ways out, so the user always knows.
 - Placement is as early as possible (ASAP), so a light week is front-loaded and leaves later
-  days free; undated tasks fill the remaining free time. Both are owner choices to confirm
-  (Q11 in VISION).
+  days free, with no daily cap on focus hours (owner-confirmed, Q11).
 - Partial progress inside a task with steps isn't tracked: a re-run plans all its steps again
   unless one of its blocks is kept.

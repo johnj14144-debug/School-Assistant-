@@ -9,12 +9,13 @@ import type { PlanWarning } from './schemas';
  * Tasks as the app stores them → what the planner places (M5).
  *
  * - Only open tasks with no open subtasks are planned; a parent's work is planned through its
- *   subtasks, which take the earliest due date and latest earliest start up their tree.
+ *   subtasks, which take the earliest due date (with its hard/soft kind) and the latest
+ *   earliest start up their tree.
  * - Work left = estimate − time logged on the task and its subtasks − blocks from now on that
- *   stay (manual, locked, in progress). Tasks with steps plan all their steps unless a kept
- *   block is already on the calendar for them.
- * - Tasks without an estimate (and without steps) aren't planned; neither are tasks whose
- *   estimate is used up. Both come back as warnings.
+ *   stay (manual, locked, in progress). A task without an estimate is planned for the default
+ *   estimate (owner decision Q11). Tasks with steps plan all their steps unless a kept block is
+ *   already on the calendar for them.
+ * - A task whose estimate is used up isn't planned; it comes back as a warning.
  */
 
 export type PlannableTask = Pick<
@@ -27,10 +28,10 @@ export type PlannableTask = Pick<
   | 'attention'
   | 'estimateMin'
   | 'dueAt'
+  | 'deadline'
   | 'earliestStartAt'
   | 'splittable'
   | 'minChunkMin'
-  | 'allowLate'
   | 'steps'
   | 'status'
   | 'createdAt'
@@ -42,6 +43,8 @@ export interface PrepareInput {
   actualMin: ReadonlyMap<string, number>;
   /** Minutes per task in blocks from now on that stay where they are. */
   keptMin: ReadonlyMap<string, number>;
+  /** Minutes planned for a task without an estimate (setting `planner.defaultEstimateMin`). */
+  defaultEstimateMin: number;
   until: Date;
 }
 
@@ -58,7 +61,7 @@ export function preparePlan(input: PrepareInput): { tasks: PlanTask[]; warnings:
   for (const task of input.tasks) {
     if (task.status !== 'open' || hasOpenChild.has(task.id)) continue;
     const chain = ancestry(task, byId);
-    const dueAt = earliest(chain.map((t) => t.dueAt));
+    const { dueAt, deadline } = earliestDue(chain);
     const earliestStartAt = latest(chain.map((t) => t.earliestStartAt));
     if (earliestStartAt && Date.parse(earliestStartAt) >= untilMs) continue;
     const root = chain.at(-1) ?? task;
@@ -70,24 +73,23 @@ export function preparePlan(input: PrepareInput): { tasks: PlanTask[]; warnings:
       priority: task.priority,
       background: task.attention === 'background',
       dueAt,
+      deadline,
       earliestStartAt,
       splittable: task.splittable,
       minChunkMin: task.minChunkMin,
-      allowLate: task.allowLate,
       steps: task.steps,
       createdAt: task.createdAt,
+      estimated: task.estimateMin !== null,
     };
     if (task.steps.length > 0) {
       if (kept === 0) tasks.push({ ...base, remainingMin: 0 });
       continue;
     }
-    if (task.estimateMin === null) {
-      if (kept === 0) warnings.push(noEstimate(task, dueAt));
-      continue;
-    }
-    const left = task.estimateMin - (input.actualMin.get(task.id) ?? 0);
+    const estimate = task.estimateMin ?? input.defaultEstimateMin;
+    const logged = input.actualMin.get(task.id) ?? 0;
+    const left = estimate - logged;
     if (left <= 0) {
-      if (kept === 0) warnings.push(spent(task, dueAt));
+      if (kept === 0) warnings.push(spent(task, dueAt, estimate, logged));
       continue;
     }
     const remainingMin = Math.ceil(left - kept);
@@ -110,39 +112,35 @@ function ancestry(task: PlannableTask, byId: Map<string, PlannableTask>): Planna
   return chain;
 }
 
-const earliest = (values: (string | null)[]) =>
-  values.reduce<string | null>(
-    (min, v) => (v !== null && (min === null || v < min) ? v : min),
-    null,
-  );
+/** The earliest due date up the tree; a hard one wins a tie. */
+function earliestDue(chain: PlannableTask[]): Pick<PlannableTask, 'dueAt' | 'deadline'> {
+  let best: PlannableTask = chain[0] as PlannableTask;
+  for (const t of chain) {
+    if (t.dueAt < best.dueAt || (t.dueAt === best.dueAt && t.deadline === 'hard')) best = t;
+  }
+  return { dueAt: best.dueAt, deadline: best.deadline };
+}
+
 const latest = (values: (string | null)[]) =>
   values.reduce<string | null>(
     (max, v) => (v !== null && (max === null || v > max) ? v : max),
     null,
   );
 
-function noEstimate(task: PlannableTask, dueAt: string | null): PlanWarning {
-  return {
-    kind: 'no-estimate',
-    taskId: task.id,
-    title: task.title,
-    dueAt,
-    minutes: 0,
-    message: `${task.title} has no estimate, so it isn't planned.`,
-    options: ['edit-task'],
-  };
-}
-
-function spent(task: PlannableTask, dueAt: string | null): PlanWarning {
+function spent(task: PlannableTask, dueAt: string, estimate: number, logged: number) {
+  const message =
+    task.estimateMin === null
+      ? `${task.title} has no estimate and already has ${formatMinutes(logged)} logged, more than the ${formatMinutes(estimate)} default; add an estimate to plan more time.`
+      : `${task.title} has used its ${formatMinutes(estimate)} estimate but isn't done; raise the estimate to plan more time.`;
   return {
     kind: 'spent',
     taskId: task.id,
     title: task.title,
     dueAt,
     minutes: 0,
-    message: `${task.title} has used its ${formatMinutes(task.estimateMin ?? 0)} estimate but isn't done; raise the estimate to plan more time.`,
+    message,
     options: ['edit-task'],
-  };
+  } satisfies PlanWarning;
 }
 
 /** "Plan my week": from now to midnight at the end of the 7th day (today included). */

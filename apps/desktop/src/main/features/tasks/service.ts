@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  defaultDue,
   type HistoryView,
   minutesWithin,
   type Task,
@@ -31,11 +32,7 @@ const PRIORITY_RANK = { high: 0, normal: 1, low: 2 } as const;
 
 /** Open tasks: due first (soonest first), then priority, then oldest. */
 function openOrder(a: Task, b: Task): number {
-  if (a.dueAt !== b.dueAt) {
-    if (a.dueAt === null) return 1;
-    if (b.dueAt === null) return -1;
-    return a.dueAt < b.dueAt ? -1 : 1;
-  }
+  if (a.dueAt !== b.dueAt) return a.dueAt < b.dueAt ? -1 : 1;
   const rank = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
   return rank !== 0 ? rank : a.createdAt.localeCompare(b.createdAt);
 }
@@ -123,12 +120,13 @@ export class TasksService {
           ? null
           : (parent?.courseId ?? null);
     const links = this.resolveLinks(courseId, fields.assignmentId);
-    const stamp = this.now().toISOString();
+    const now = this.now();
+    const stamp = now.toISOString();
     const task: Task = {
       ...fields,
       ...links,
       type: fields.type ?? parent?.type ?? '',
-      dueAt: fields.dueAt === null ? null : normalizeInstant(fields.dueAt),
+      ...this.dueFor(fields, parent, today, now),
       earliestStartAt:
         fields.earliestStartAt === null ? null : normalizeInstant(fields.earliestStartAt),
       todayOrder: today ? this.nextTodayOrder() : null,
@@ -328,6 +326,36 @@ export class TasksService {
    * course that doesn't match is an error. `courseOnly`: the user changed just the course, so a
    * link to another course's assignment is dropped instead.
    */
+  /**
+   * Every task has a due date (owner decision Q11). Left out, it's the assignment's (hard), else
+   * the parent's (with its kind), else a soft one: tonight for the Today list, else a week out.
+   */
+  private dueFor(
+    fields: Pick<z.output<typeof taskCreateSchema>, 'dueAt' | 'deadline' | 'assignmentId'>,
+    parent: Task | null,
+    today: boolean,
+    now: Date,
+  ): Pick<Task, 'dueAt' | 'deadline'> {
+    if (fields.dueAt !== undefined) {
+      return { dueAt: normalizeInstant(fields.dueAt), deadline: fields.deadline ?? 'hard' };
+    }
+    const assignmentDue = fields.assignmentId
+      ? this.db
+          .select({ dueAt: assignments.dueAt })
+          .from(assignments)
+          .where(eq(assignments.id, fields.assignmentId))
+          .get()?.dueAt
+      : null;
+    if (assignmentDue) return { dueAt: assignmentDue, deadline: fields.deadline ?? 'hard' };
+    if (parent) return { dueAt: parent.dueAt, deadline: fields.deadline ?? parent.deadline };
+    const due = defaultDue(
+      { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() },
+      today,
+    );
+    const local = new Date(due.year, due.month - 1, due.day, due.hour, due.minute);
+    return { dueAt: local.toISOString(), deadline: fields.deadline ?? 'soft' };
+  }
+
   private resolveLinks(
     courseId: string | null,
     assignmentId: string | null,

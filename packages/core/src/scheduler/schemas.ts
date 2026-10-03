@@ -7,36 +7,29 @@ import { idSchema, utcInstantSchema } from '../schemas/course';
  */
 
 /**
- * - `plan-late`: plan the rest of the task after its due date (sets `allowLate`).
+ * - `make-soft`: make the hard deadline soft, so the rest is planned after it.
  * - `allow-split`: let a one-sitting task be split over several blocks.
  * - `edit-task`: open the task (estimate, due date, earliest start).
  */
-export const planOptionSchema = z.enum(['plan-late', 'allow-split', 'edit-task']);
+export const planOptionSchema = z.enum(['make-soft', 'allow-split', 'edit-task']);
 export type PlanOption = z.infer<typeof planOptionSchema>;
 
 /**
- * - `short`: part of the work doesn't fit before the due date.
- * - `overdue`: the due date has passed with work left.
- * - `late`: planned after the due date, as the user allowed.
+ * - `short`: part of the work doesn't fit before its hard due date.
+ * - `overdue`: a hard due date has passed with work left.
+ * - `late`: a soft deadline isn't met (work after it, or left for next week).
  * - `unplaced`: the steps of a laundry-style task (or a background task) fit nowhere.
- * - `no-estimate`: not planned until it has an estimate.
- * - `spent`: the estimate is used up but the task is still open.
+ * - `spent`: the estimate (or the default for tasks without one) is used up but the task is
+ *   still open.
  */
-export const planWarningKindSchema = z.enum([
-  'short',
-  'overdue',
-  'late',
-  'unplaced',
-  'no-estimate',
-  'spent',
-]);
+export const planWarningKindSchema = z.enum(['short', 'overdue', 'late', 'unplaced', 'spent']);
 export type PlanWarningKind = z.infer<typeof planWarningKindSchema>;
 
 export const planWarningSchema = z.object({
   kind: planWarningKindSchema,
   taskId: idSchema,
   title: z.string(),
-  dueAt: utcInstantSchema.nullable(),
+  dueAt: utcInstantSchema,
   /** Minutes that don't fit (short, overdue, unplaced) or that are planned late (late). */
   minutes: z.number().int().min(0),
   message: z.string(),

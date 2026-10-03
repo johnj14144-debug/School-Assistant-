@@ -36,17 +36,27 @@ describe('PlannerService', () => {
   it('plans open tasks around the routine and keeps a summary', () => {
     const env = setup();
     const hw = env.task('Calc HW 3', { estimateMin: 90, dueAt: at('04:59', 9) });
-    env.task('Buy a calculator');
+    // No estimate and no due date: planned for the default hour by its soft deadline.
+    const calc = env.task('Buy a calculator');
     const run = env.planner.planWeek();
     expect(run).toMatchObject({
       at: NOW,
       from: NOW,
       until: '2026-10-14T05:00:00.000Z',
-      blockCount: 1,
-      plannedMin: 90,
-      warnings: [expect.objectContaining({ kind: 'no-estimate', title: 'Buy a calculator' })],
+      blockCount: 2,
+      plannedMin: 150,
+      warnings: [],
     });
-    expect(plannerBlocks(env)).toEqual([
+    const [first, second] = plannerBlocks(env);
+    expect(second).toMatchObject({
+      taskId: calc.id,
+      startAt: at('15:50'),
+      endAt: at('16:50'),
+      reason: expect.stringContaining(
+        "Soft deadline Wed, Oct 14, 11:59 PM, with 108h 30m of free time to spare. The earliest deadline among open work. No estimate yet, so it's planned for the default length.",
+      ),
+    });
+    expect([first]).toEqual([
       expect.objectContaining({
         taskId: hw.id,
         startAt: at('13:00'),
@@ -125,14 +135,20 @@ describe('PlannerService', () => {
     expect(run.plannedMin).toBe(600 + 20);
   });
 
-  it('warns about work that misses its due date and plans it late once allowed', () => {
+  it('warns about work that misses a hard due date and plans past it once the deadline is soft', () => {
     const env = setup();
     const report = env.task('Lab report', { estimateMin: 300, dueAt: at('15:00') });
+    expect(report.deadline).toBe('hard');
     const run = env.planner.planWeek();
     expect(run.warnings).toEqual([
-      expect.objectContaining({ kind: 'short', taskId: report.id, minutes: 210 }),
+      expect.objectContaining({
+        kind: 'short',
+        taskId: report.id,
+        minutes: 210,
+        options: ['make-soft', 'edit-task'],
+      }),
     ]);
-    env.update(report.id, { allowLate: true });
+    env.update(report.id, { deadline: 'soft' });
     const late = env.planner.planWeek();
     expect(late.warnings).toEqual([expect.objectContaining({ kind: 'late', taskId: report.id })]);
     expect(
@@ -154,16 +170,24 @@ describe('PlannerService', () => {
 
   it('reads and saves its preferences', () => {
     const env = setup();
-    expect(env.planner.preferences()).toEqual({ maxChunkMin: 90, breakMin: 10 });
-    expect(env.planner.setPreferences({ maxChunkMin: 60 })).toEqual({
+    expect(env.planner.preferences()).toEqual({
+      maxChunkMin: 90,
+      breakMin: 10,
+      defaultEstimateMin: 60,
+    });
+    expect(env.planner.setPreferences({ maxChunkMin: 60, defaultEstimateMin: 30 })).toEqual({
       maxChunkMin: 60,
       breakMin: 10,
+      defaultEstimateMin: 30,
     });
-    env.task('Essay', { estimateMin: 120 });
+    env.task('Essay', { estimateMin: 120, dueAt: at('04:59', 9) });
+    env.task('Buy a calculator');
     env.planner.planWeek();
-    expect(plannerBlocks(env).map((b) => [b.startAt, b.endAt])).toEqual([
-      [at('13:00'), at('14:00')],
-      [at('15:50'), at('16:50')],
+    // The 50 minutes before MATH are too short for the essay's second hour, not for 30 minutes.
+    expect(plannerBlocks(env).map((b) => [b.label, b.startAt, b.endAt])).toEqual([
+      ['Essay', at('13:00'), at('14:00')],
+      ['Buy a calculator', at('14:10'), at('14:40')],
+      ['Essay', at('15:50'), at('16:50')],
     ]);
   });
 });

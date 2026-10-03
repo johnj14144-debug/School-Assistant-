@@ -134,14 +134,15 @@ describe('School Assistant (built app)', () => {
       estimateMin: 120,
       dueAt: due,
     });
-    await invoke(page, 'task:create', { title: 'No estimate yet' });
+    // No due date typed: a soft deadline a week out; no estimate: the default hour.
+    const unestimated = await invoke(page, 'task:create', { title: 'No estimate yet' });
+    expect(unestimated.deadline).toBe('soft');
 
     await page.getByRole('link', { name: 'Calendar', exact: true }).click();
     await page.getByRole('button', { name: 'Plan my week' }).click();
     const panel = page.getByRole('region', { name: 'Plan' });
-    // The essay, plus the smoke-test task from the first test (30 min estimate).
-    await panel.getByText(/^Planned \d+ blocks?, 2h 30m of work/).waitFor();
-    await panel.getByRole('link', { name: 'No estimate yet' }).waitFor();
+    // Earlier tests' tasks are planned too, so only the shape of the summary is fixed.
+    await panel.getByText(/^Planned \d+ blocks?, .* of work, through/).waitFor();
 
     const now = Date.now();
     const range = await invoke(page, 'calendar:range', {
@@ -150,10 +151,12 @@ describe('School Assistant (built app)', () => {
     });
     const planned = range.blocks.filter((b) => b.source === 'planner');
     expect(planned.every((b) => b.conflict === null)).toBe(true);
-    const minutes = planned
-      .filter((b) => b.taskId === essay.id)
-      .reduce((sum, b) => sum + (Date.parse(b.endAt) - Date.parse(b.startAt)) / 60_000, 0);
-    expect(minutes).toBe(120);
+    const minutesFor = (taskId: string) =>
+      planned
+        .filter((b) => b.taskId === taskId)
+        .reduce((sum, b) => sum + (Date.parse(b.endAt) - Date.parse(b.startAt)) / 60_000, 0);
+    expect(minutesFor(essay.id)).toBe(120);
+    expect(minutesFor(unestimated.id)).toBe(60);
 
     // The block dialog explains it (when the first block is in this week's view).
     const weekEnd = new Date();
@@ -162,18 +165,25 @@ describe('School Assistant (built app)', () => {
     if (Date.parse(planned[0]?.startAt ?? '') < weekEnd.getTime()) {
       await page.locator('.sa-planner').first().click();
       await page.getByText('Why here').waitFor();
-      await page.getByText(/Due .*, with .* of free time to spare/).waitFor();
+      await page.getByText(/(Due|Soft deadline) .*, with .* of free time to spare/).waitFor();
       await page.keyboard.press('Escape');
     }
 
     // Plan again: the planner's blocks are replaced, not added to.
+    const firstRun = await invoke(page, 'planner:last-run');
     await page.getByRole('button', { name: 'Plan my week' }).click();
-    await panel.getByText(/^Planned \d+ blocks?, 2h 30m of work/).waitFor();
+    await page.waitForFunction(async (at) => {
+      type LooseApi = { invoke(channel: string): Promise<{ at: string } | null> };
+      const run = await (globalThis as unknown as { api: LooseApi }).api.invoke('planner:last-run');
+      return run !== null && run.at !== at;
+    }, firstRun?.at ?? '');
     const again = await invoke(page, 'calendar:range', {
       from: new Date(now - 3_600_000).toISOString(),
       to: new Date(now + 8 * 86_400_000).toISOString(),
     });
-    expect(again.blocks.filter((b) => b.source === 'planner')).toHaveLength(planned.length);
+    const essayBlocks = (r: typeof range) =>
+      r.blocks.filter((b) => b.source === 'planner' && b.taskId === essay.id);
+    expect(essayBlocks(again)).toHaveLength(essayBlocks(range).length);
 
     await app.close();
     expect(pageErrors).toEqual([]);

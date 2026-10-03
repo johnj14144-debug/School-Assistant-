@@ -29,8 +29,8 @@ export function usePlanWeek() {
   function choose(warning: PlanWarning, option: PlanOption) {
     const id = warning.taskId;
     if (option === 'edit-task') navigate(`/tasks/${id}`);
-    else if (option === 'plan-late') {
-      void plan(() => window.api.invoke('task:update', { id, allowLate: true }));
+    else if (option === 'make-soft') {
+      void plan(() => window.api.invoke('task:update', { id, deadline: 'soft' }));
     } else void plan(() => window.api.invoke('task:update', { id, splittable: true }));
   }
 
@@ -140,7 +140,7 @@ export function PlanPanel() {
               >
                 {w.title}
               </Link>
-              {w.kind === 'spent' ? ' (estimate used up)' : ' (no estimate)'}
+              {' (estimate used up)'}
             </span>
           ))}
         </p>
