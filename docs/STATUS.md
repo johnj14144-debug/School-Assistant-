@@ -64,6 +64,11 @@ Ask the owner first (Q14–Q15 below), then:
   will loop. Services report plan events only after their own DB write. A waiting automatic
   re-plan runs only through the injected `schedule` (tests pass a no-op and call
   `planner.flush()`); `tick()`/`flush()` log errors instead of throwing (they run from timers).
+- **CI found a latent M5 case with a fresh random seed:** kept work starting exactly at the plan's
+  end isn't on the grid, so no break was left before it. `Context.workStartAfter` now carries
+  it into the gap logic and the sticky check (regression tests in `plan.test.ts` and
+  `replan.test.ts`). fast-check seeds change every run; replay a CI failure with
+  `{ seed, path }` from the log.
 - **Playwright `waitForFunction` with an async predicate resolves at once** (the promise is
   truthy). Poll from Node instead (`until()` in `e2e/smoke.e2e.ts`).
 - **Ties in due date** are broken by priority, then `createdAt`, then id; tasks made in one

@@ -211,6 +211,8 @@ interface Context {
   say: Wording;
   /** The end slot of kept work that ended before the plan starts (it still earns its break). */
   workEndBefore: number;
+  /** The first slot (at or past the plan's end) where kept work starts after the plan. */
+  workStartAfter: number;
 }
 
 function context(input: PlanInput): Context {
@@ -222,13 +224,26 @@ function context(input: PlanInput): Context {
     base.mark(Date.parse(f.startAt), Date.parse(f.endAt), isHard(f.kind) ? HARD : SOFT);
   }
   let workEndBefore = Number.NEGATIVE_INFINITY;
+  let workStartAfter = Number.POSITIVE_INFINITY;
   for (const k of input.kept) {
     const end = Date.parse(k.endAt);
+    const begin = Date.parse(k.startAt);
     if (k.mode === 'work' && end <= start) workEndBefore = Math.max(workEndBefore, base.ceil(end));
+    // Work just past the plan's end isn't on the grid, but still needs its break before it.
+    if (k.mode === 'work' && begin >= base.time(size)) {
+      workStartAfter = Math.min(workStartAfter, base.floor(begin));
+    }
     if (k.mode === 'background') continue;
     base.mark(Date.parse(k.startAt), end, k.mode === 'work' ? WORK : BUSY);
   }
-  return { input, settings, base, say: new Wording(input.timeZone), workEndBefore };
+  return {
+    input,
+    settings,
+    base,
+    say: new Wording(input.timeZone),
+    workEndBefore,
+    workStartAfter,
+  };
 }
 
 interface Attempt {
@@ -587,6 +602,7 @@ function chooseSticky(
     if (!sized || s < release(task) || (task.deadline === 'hard' && e > due(task))) continue;
     if (!grid.isFree(s, e) || s < ctx.workEndBefore + brk) continue;
     if (grid.hasFlag(s - brk, s, WORK) || grid.hasFlag(e, e + brk, WORK)) continue;
+    if (e + brk > ctx.workStartAfter) continue;
     grid.markSlots(s, e, WORK);
     valid.set(task.id, [
       ...(valid.get(task.id) ?? []),
@@ -874,6 +890,7 @@ function placeFocus(
         break;
       }
     }
+    if (runEnd >= grid.size) end = Math.min(end, ctx.workStartAfter - brk);
     if (begin >= end) {
       t = runEnd;
       continue;

@@ -224,6 +224,20 @@ describe('replan', () => {
     );
   });
 
+  it('releases a block right before kept work just past the plan', () => {
+    const task = planTask({ title: 'T', remainingMin: 120 });
+    const until = new Date(at('14:00'));
+    const { again } = setup([task], { until });
+    const previous: PreviousBlock[] = [
+      { id: 'late', taskId: task.id, startAt: at('13:00'), endAt: at('14:00'), kind: 'work' },
+    ];
+    const out = again({
+      previous,
+      kept: [{ startAt: at('14:00'), endAt: at('14:30'), mode: 'work' }],
+    });
+    expect(described(out.blocks)).toEqual(['new Mon 8:00–8:50']);
+  });
+
   it('gives up kept blocks when keeping them costs a deadline', () => {
     const big = planTask({ title: 'Big', subject: 'z', remainingMin: 900, dueAt: at('04:59', 11) });
     const { previous, again } = setup([a, b, c, d, big]);

@@ -333,6 +333,22 @@ describe('planWeek', () => {
     expect(spans(blocks)).toEqual(['Mon 9:00–10:00']);
   });
 
+  it('keeps a break before kept work that starts just past the plan', () => {
+    // The plan ends at 9:00; a block placed by hand starts then.
+    const { blocks } = plan({
+      until: new Date('2026-10-05T14:00:00.000Z'),
+      tasks: [planTask({ remainingMin: 120 })],
+      kept: [
+        {
+          startAt: '2026-10-05T14:00:00.000Z',
+          endAt: '2026-10-05T14:30:00.000Z',
+          mode: 'work',
+        },
+      ],
+    });
+    expect(spans(blocks)).toEqual(['Mon 8:00–8:50']);
+  });
+
   it('keeps sleep where it is across the fall-back change', () => {
     const now = '2026-10-31T13:00:00.000Z';
     const until = '2026-11-03T06:00:00.000Z';
