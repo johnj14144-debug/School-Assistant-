@@ -167,6 +167,21 @@ reset. The app never uses API keys. The only overflow allowed is Anthropic's own
   remaining), and min possible grade.
 - Supports weighted-category and points-based courses, and per-course letter scales.
 - Self-study courses from the Life Coach appear here too.
+- **How grades are computed** (chosen in M1, the usual Canvas conventions; confirmed by the
+  owner, Q7):
+  - The current grade counts graded work only. Categories with nothing graded yet don't count.
+  - Max assumes 100% on everything not yet graded; min assumes 0%. A category with no
+    assignments entered yet (e.g. a final exam worth 25%) counts as wide open.
+  - "Drop the lowest N" drops the scores that help the grade most, which is usually but not
+    always the lowest percent (a 0/1 can matter less than a 50/100).
+  - Extra credit: scoring above the points possible counts, and an assignment marked extra
+    credit adds points without adding to the total. Ungraded extra credit is counted in the max
+    (you could still earn it) but not in the min.
+  - Grades aren't rounded before the letter is picked (89.99% is not an A-).
+  - **Bonus categories** (added in M2 from the owner's HIST 4318 syllabus: "5 points extra
+    credit can be added to your final grade"): a category can count as a bonus on the final
+    grade instead of as part of it. Its points go straight onto the final percent, up to the
+    category's cap, and it isn't part of the 100% of weights.
 
 ---
 
@@ -199,3 +214,5 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q6 | Time zone when traveling | Fixed events keep their own zone (Houston by default); display follows the laptop |
 | — | "Reality check" | Don't judge whether the goal is reachable or lower it. Build the plan for the stated goal with feasibility warnings. The real check is impact: "would winning X help with goal Y?" |
 | — | Review pitches P1–P9 | All declined (see `docs/IDEAS.md`), including the pre-run usage estimate |
+| Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
+| Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |

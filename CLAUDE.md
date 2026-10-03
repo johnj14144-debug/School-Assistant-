@@ -34,6 +34,7 @@ pnpm check            # lint + typecheck + tests (run before every commit)
 pnpm lint:fix         # Biome format + safe fixes
 pnpm test             # Vitest (all projects)
 pnpm build            # production build of the desktop app (apps/desktop/out)
+pnpm --filter @sa/desktop db:generate   # after editing src/main/db/schema.ts: next SQL migration
 pnpm --filter @sa/desktop dist   # Windows installer (run on Windows)
 pnpm fable-kit        # bundle the whole project into one file for an outside review
 ```
@@ -72,6 +73,8 @@ pnpm fable-kit        # bundle the whole project into one file for an outside re
   dossier, the roadmap and each course before tasks are created.
 - Renderer URL policy: links open externally only if `isSafeExternalUrl`; navigation only if
   `isAllowedNavigation` (`src/main/security.ts`). Don't bypass these for new features.
+- Database changes: edit `src/main/db/schema.ts`, run `db:generate`, commit the new SQL file
+  and `meta/`. Never edit or regenerate a migration that has shipped (ADR 0008).
 - Never commit user data (`*.db`), secrets, or tokens. Bot tokens go in Electron `safeStorage`
   and Worker secrets.
 - Keep `@sa/core` in the desktop app's **devDependencies** (it must be bundled, not externalized).

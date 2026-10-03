@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes } from 'react-router';
+import type { IpcOutput } from '../../shared/ipc';
+import { StartupError } from './components/StartupError';
 import { cn } from './lib/cn';
-import { type AppRoute, routes } from './routes';
+import { type AppRoute, pageRoutes, routes } from './routes';
 
 function SidebarLink({ path, label, icon: Icon }: AppRoute) {
   return (
@@ -22,6 +25,14 @@ function SidebarLink({ path, label, icon: Icon }: AppRoute) {
 }
 
 export function App() {
+  const [status, setStatus] = useState<IpcOutput<'app:status'> | null>(null);
+
+  useEffect(() => {
+    void window.api.invoke('app:status').then(setStatus);
+  }, []);
+
+  if (!status) return null;
+  if (!status.ok) return <StartupError failure={status} />;
   return (
     <div className="flex h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <nav className="flex w-56 shrink-0 flex-col gap-1 border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
@@ -47,7 +58,7 @@ export function App() {
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/today" replace />} />
-          {routes.map(({ path, element }) => (
+          {[...routes, ...pageRoutes].map(({ path, element }) => (
             <Route key={path} path={path} element={element} />
           ))}
         </Routes>

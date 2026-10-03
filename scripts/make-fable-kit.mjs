@@ -8,6 +8,7 @@ const INSTRUCTIONS = 'docs/prompts/fable-review.md';
 const EXCLUDE = [
   /^pnpm-lock\.yaml$/,
   /\.(png|ico|jpe?g|gif|webp|pdf|woff2?)$/i,
+  /\/db\/migrations\/meta\//, // drizzle-kit snapshots (generated; the .sql files are kept)
   new RegExp(`^${INSTRUCTIONS.replaceAll('.', '\\.')}$`),
 ];
 

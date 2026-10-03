@@ -8,5 +8,7 @@
       "@renderer/*": ["./src/renderer/src/*"]
     }
   },
-  "include": ["src/renderer/src", "src/shared"]
+  "include": ["src/renderer/src", "src/shared"],
+  // Renderer unit tests run in Node (Vitest); tsconfig.node.json checks them.
+  "exclude": ["src/renderer/src/**/*.test.ts"]
 }

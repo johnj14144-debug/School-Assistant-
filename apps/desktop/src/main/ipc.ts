@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { type IpcChannel, type IpcOutput, type IpcParsedInput, ipcContract } from '../shared/ipc';
+import type { Logger } from './log';
 
 type Handler<C extends IpcChannel> = (
   input: IpcParsedInput<C>,
@@ -22,9 +23,23 @@ export function createIpcDispatcher(handlers: IpcHandlers) {
   };
 }
 
-export function registerIpcHandlers(handlers: IpcHandlers): void {
+/** Registers every channel. Failures are logged here, then passed on to the renderer. */
+export function registerIpcHandlers(handlers: IpcHandlers, log: Logger): void {
   const dispatch = createIpcDispatcher(handlers);
   for (const channel of Object.keys(ipcContract) as IpcChannel[]) {
-    ipcMain.handle(channel, (_event, raw: unknown) => dispatch(channel, raw));
+    ipcMain.handle(channel, async (_event, raw: unknown) => {
+      try {
+        return await dispatch(channel, raw);
+      } catch (error) {
+        log.error(`IPC ${channel} failed`, error);
+        throw error;
+      }
+    });
   }
 }
+
+/** The handlers for every channel starting with one of the given prefixes, e.g. 'backup'. */
+export type HandlersFor<Prefix extends string> = Pick<
+  IpcHandlers,
+  Extract<IpcChannel, `${Prefix}:${string}`>
+>;

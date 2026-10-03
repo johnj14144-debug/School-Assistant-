@@ -13,7 +13,9 @@ through Telegram, powered by your own Claude subscription.
 - **Grade Calc**: every grade in every course, your current grade, and the best grade still
   possible.
 
-> Status: **foundation built (M0)**; the first outside review is applied. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
+> Status: **Grade Calc works (M1–M2)**: courses, categories, assignments, bulk paste and live
+> current / best / worst grades, on a SQLite database with daily backups. Next up are tasks,
+> the timer and the Today list (M3). See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next and
 > [docs/STATUS.md](docs/STATUS.md) for the latest handoff note.
 
 ## Set up on your Windows laptop
@@ -46,7 +48,7 @@ updates the status note for the next one.
 |---|---|
 | [docs/VISION.md](docs/VISION.md) | What the app does and why (the product spec) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it's built |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M12 with checklists |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones M0–M16 with checklists |
 | [docs/STATUS.md](docs/STATUS.md) | Where things stand right now |
 | [docs/IDEAS.md](docs/IDEAS.md) | Parked ideas for later |
 | [docs/decisions/](docs/decisions/) | Why key choices were made |

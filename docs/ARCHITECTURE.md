@@ -39,7 +39,9 @@ marked with the milestone that adds them (see [ROADMAP.md](ROADMAP.md)).
 
 ```
 packages/core/src/
-  grades/        letter scales, course grade math (M1)
+  grades/        letter scales, course grade math (M1), bulk-paste parser and numbered
+                 series for adding assignments (M2)
+  retention/     which dated backups and logs to keep (M1)
   time/          recurrence expansion with time zones, availability windows (M4)
   scheduler/     time-blocking + re-planning (M5–M6)
   estimator/     duration learning (M7)
@@ -49,9 +51,10 @@ apps/desktop/
   electron.vite.config.ts  electron-builder.yml  resources/ (icons)
   src/main/      index.ts (window, tray, lifecycle), security.ts (URL policy), ipc.ts
                  (validated dispatcher), handlers.ts (composes per-feature handler objects),
-                 log.ts (M1), db/ (Drizzle schema + migrations + backup, M1),
+                 runtime.ts (opens the DB, builds services), log.ts,
+                 db/ (schema, migrations/, migrate, database, settings, backup),
                  features/<name>/ (services + that feature's IPC handlers),
-                 ai/ (claude runner + job queue, M9)
+                 ai/ (claude runner + job queue, M9), test/ (test helpers)
   src/preload/   exposes window.api (contextIsolation + sandbox on)
   src/shared/    ipc.ts: the IPC contract, imported by main, preload and renderer
   src/renderer/src/
@@ -77,18 +80,34 @@ transforms in the schema apply. To add a call:
 3. Call `window.api.invoke('<channel>', input)` from the renderer. It is fully typed.
 
 Handler errors are logged in main (`log.ts`) before Electron forwards them to the renderer.
+Feature handler objects are typed `HandlersFor<'prefix'>` (every channel starting with that
+prefix). If the database fails to open, only the `app:*` channels work and the renderer shows
+an error screen (`app:status`).
 
 ## Storage, backups and logging (M1)
 
 - SQLite in `%APPDATA%/School Assistant/school-assistant.db` (`app.getPath('userData')`),
-  `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`. Drizzle migrations run on startup
-  inside a transaction; a failed migration keeps the old file and shows an error screen.
-- **Backup:** once a day (and on demand) `VACUUM INTO '<backupDir>/school-assistant-YYYY-MM-DD.db'`.
-  Keep the last 14 daily files and the first of each month. `backupDir` is a setting with a
-  default under the user's Documents folder; the Settings page lets the owner pick OneDrive.
-  Restore = quit, copy the chosen file over the live DB, relaunch (M8 adds the UI).
-- **Log:** `electron-log` to `app.getPath('logs')`, daily files, 7 kept, `info` by default.
-  Every AI job writes its command line (without prompt text), duration, usage and outcome.
+  `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, opened by `db/database.ts`.
+- **Migrations** (ADR 0008): drizzle-kit writes SQL from `db/schema.ts`
+  (`pnpm --filter @sa/desktop db:generate`); the files are embedded in the bundle and
+  `db/migrate.ts` applies the pending ones in one transaction, tracked by `PRAGMA user_version`.
+  A failure rolls back, leaves the file untouched and shows the error screen; a database newer
+  than the app is refused.
+- **Settings** (`db/settings.ts`): typed keys, each with a zod schema and default, stored as
+  JSON text in the `setting` table.
+- **Backup** (`db/backup.ts`): `VACUUM INTO '<folder>/school-assistant-YYYY-MM-DD.db'` (local
+  date), written as `….partial` and renamed when complete. Checked a minute after startup and
+  every 30 minutes; runs when today's file is missing from the folder; "Back up now" replaces
+  today's file. Keeps the newest 14 dated files plus the earliest of every month
+  (`datesToPrune` in core); other files in the folder are never touched. The folder is the
+  `backup.folder` setting, default `Documents\School Assistant Backups`; picking a folder in
+  Settings backs up into it first, so an unwritable folder is rejected. The last success and
+  the last error are settings shown on the Settings page.
+  Restore = quit, delete the live DB and its `-wal`/`-shm` files, copy the backup in under the
+  live name, relaunch (M8 adds the UI).
+- **Log** (`log.ts`): `electron-log` to `app.getPath('logs')` as `main-YYYY-MM-DD.log`, 7 days
+  kept, `info` by default; uncaught errors are logged. Every AI job writes its command line
+  (without prompt text), duration, usage and outcome.
 - The database and logs are never committed.
 
 ## Data model (target)
@@ -99,9 +118,9 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | Entity | Key fields | Milestone |
 |---|---|---|
 | Setting | key, value (JSON) | M1 |
-| Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale, color, goalId?, milestoneId?, primaryMaterialIds | M1 |
-| GradeCategory | courseId, name, weight, dropLowest | M1 |
-| Assignment | courseId, categoryId, title, dueAt, pointsPossible, pointsEarned?, unitId? | M1 |
+| Course | name, code, term, kind (`enrolled`/`self_study`), grading (`weighted`/`points`), letterScale (JSON), color, createdAt, updatedAt; goalId?, milestoneId?, primaryMaterialIds added in M12 | M1 |
+| GradeCategory | courseId, name, kind (`regular`/`bonus`, M2), weight (percent; a bonus category's cap in percentage points), dropLowest, position | M1 |
+| Assignment | courseId, categoryId? (set null if the category is deleted), title, dueAt?, pointsPossible, pointsEarned?, extraCredit, createdAt, updatedAt; unitId? added in M12 | M1 |
 | Task | title, description, courseId?, assignmentId?, unitId?, parentId?, type, quantity+unit, estimateMin, dueAt?, earliestStart?, priority, splittable, minChunkMin, attention (`focus`/`light`/`background`), steps, today (bool + order), status | M3 |
 | TimeSession | taskId, startAt, endAt?, source (`desktop`/`phone`/`manual`) | M3 |
 | Completion | taskId, completedAt, summary | M3 |
@@ -124,6 +143,38 @@ events keep local time + IANA zone (ADR 0007); durations are minutes.
 | CoachNote | goalId?, text, source (`app`/`phone`/`feedback`) | M11 |
 | RelayCursor / Reminder / PhoneEvent | sync state with the relay | M14 |
 | Report | kind (`weekly_research`/`weekly_review`), weekOf, markdown, data | M16 |
+
+## Grade math (M1, `packages/core/src/grades`)
+
+`courseGrade({ grading, categories, assignments })` returns current, max and min percents with a
+per-category breakdown and warnings.
+
+- **Weighted:** a category's percent pools its points (earned / possible); the course grade is
+  the weight-averaged category percent. **Points:** everything pools; weights are ignored.
+- **Current** uses graded work only, renormalizing weights over graded categories. **Max** puts
+  100% on everything ungraded; **min** puts 0%. A weighted category with nothing entered is
+  fully open (100% for max, 0% for min).
+- **Drop lowest** (per category, both grading types) removes the scores whose removal raises
+  the category most (exact, via Dinkelbach's method), always keeping one. For the current grade
+  it drops among graded work only.
+- **Extra credit:** earned above possible counts; an `extraCredit` assignment adds its earned
+  points without adding its possible points, is never dropped, and counts at full value in the
+  max only.
+- **Bonus categories** (`kind: 'bonus'`, M2): for syllabi like "up to 5 points of extra credit
+  added to your final grade". Earned points in the category are added to the final percent one
+  for one, capped at the category's weight, in both grading types. They are not part of the
+  100% of weights. Empty bonus category: the whole cap in the max, 0 in current and min.
+- Warnings: weights not summing to 100 (weights are renormalized), uncategorized assignments in
+  a weighted course (ignored). Results are rounded at 1e-10 so float noise can't cost a letter.
+
+**Entering grades (M2).** The course page (`renderer/src/features/grades/CoursePage.tsx`)
+edits categories and assignments in place (`EditableCell`: Enter or leaving the cell saves,
+Escape cancels, a rejected value reverts and the error shows in a toast). Every change goes
+through one `act()` that calls IPC and then reloads `course:get`, so the grades shown always
+come from core. Bulk add uses two pure core helpers, `parseAssignmentLines` (pasted
+"HW 1, 10/7, 20 pts" lines) and `numberedSeries` ("Video Quiz 1…8", every N days); both return
+local wall-clock due dates, which the renderer turns into UTC instants (ADR 0007), and save
+through `assignment:create-many` in one transaction.
 
 ## Time and recurrence (M4, `packages/core/src/time`)
 
@@ -172,18 +223,28 @@ Facts this design relies on were checked against the Claude Code docs on 2026-10
   when `--bare` becomes the default for `-p` (announced in the docs) the fix is one entry, not a
   redesign. Settings shows "Claude Code v2.1.xxx found, logged in" (`claude --version`,
   `claude auth status`) and refuses to run jobs below the minimum version (2.1.259).
-- **Windows:** resolve the real executable (`where claude` → `claude.cmd` → run through
-  `cmd /c`, or the native `claude.exe` if installed) once, cache it, re-check on failure.
+- **Windows:** resolve the real executable once, cache it, re-check on failure. On the
+  owner's laptop it is the native `%USERPROFILE%\.local\bin\claude.exe` (M1 spike); an npm
+  install would be `claude.cmd`, which only runs through `cmd.exe /d /s /c`. Pass arguments as
+  one Windows-quoted string (see `scripts/claude-cli-spike.ps1`), never through a shell.
 - **Working folder:** `<userData>/ai-work/<jobId>/`, empty except for job inputs. Because `-p`
   without `--bare` loads `~/.claude` settings, hooks and MCP servers, and any
-  `CLAUDE.md`/`.mcp.json` in the folder, the folder never contains those. To keep the user's
-  own hooks and MCP servers out too, test in the M1 spike: `--setting-sources` (limits which
-  settings files load), `--strict-mcp-config` with an empty config, and `--safe-mode`
-  (customizations off, login unaffected per the docs).
+  `CLAUDE.md`/`.mcp.json` in the folder, the folder never contains those. The M1 spike showed
+  `--setting-sources user`, `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` and
+  `--safe-mode` all work with the subscription login and still return `structured_output`.
+  `--safe-mode` also trimmed about 5 K tokens from every call, so jobs should use it unless a
+  job needs a customization.
+- **Per-call overhead:** each `-p` call carries roughly 20–26 K input tokens of system prompt
+  and tool definitions before the job's own prompt (M1 spike). The 5-minute prompt cache is
+  shared between back-to-back calls (about 15.7 K tokens read from cache), so related calls
+  should run close together, and multi-stage jobs should resume one session.
+  `total_cost_usd` is computed at list price (`costBasis: "list"`); on the plan it is only an
+  estimate for the usage meter.
 - **Model tiers** are aliases from Settings (`haiku` quick parsing, `sonnet` default and
   research gathering, `opus` synthesis and roadmap design). New model versions need no code
-  change. If `opus` isn't available on the plan or hits its own limit, synthesis falls back to
-  `sonnet`.
+  change. If `opus` hits its own limit, synthesis falls back to `sonnet`. The M1 spike showed
+  `--model opus` works on the owner's plan, and that with no `--model` the CLI picks Opus with
+  the 1M context (`claude-opus-5[1m]` in `modelUsage`), so the runner always passes `--model`.
 - **Structured intents, not free rein:** Claude returns JSON validated by zod schemas from core
   (`structured_output` field). The app applies them. Claude never edits the database.
 - **Job queue:** priority phone > daily > deep work; one job at a time. Each job records
@@ -193,7 +254,12 @@ Facts this design relies on were checked against the Claude Code docs on 2026-10
   "… Sonnet limit …"; `stream-json` also emits `system/api_retry` with `error: "rate_limit"`.
   A hit moves the job to `waiting_for_reset` with `resumeAfter` parsed from the message (else
   +60 min, doubling). Resume uses `--resume <sessionId>`. The exact `-p` JSON shape of a limit
-  hit isn't documented; record it from a real run.
+  hit isn't documented; record it from a real run. A successful result (M1 spike) has
+  `type: "result"`, `subtype: "success"`, `is_error: false`, `api_error_status: null`,
+  `terminal_reason: "completed"`, `num_turns: 2` (structured output arrives through a tool
+  call, so `stop_reason` is `"tool_use"`), `result` (the JSON as text), `structured_output`,
+  `session_id`, `usage`, `modelUsage` keyed by model id, `total_cost_usd` and
+  `permission_denials`. `api_error_status` is the first place to look for a limit hit.
 - **Usage credits (owner decision Q3):** an account setting the owner turns on and caps at
   claude.ai; the app never turns them on. When a research run pauses at a limit, the job page
   offers "Wait for the reset" (default) or "Continue with usage credits", which shows how to
@@ -258,7 +324,7 @@ always carries a visible feasibility warning.
 | Layer | Tool | Where |
 |---|---|---|
 | Domain logic | Vitest (+ fast-check from M5) | `packages/core/src/**/*.test.ts` |
-| Main-process services | Vitest with `electron` mocked | `apps/desktop/src/main/**/*.test.ts` |
+| Main-process services | Vitest with `electron` mocked; real SQLite (`:memory:` or temp files) | `apps/desktop/src/main/**/*.test.ts` |
 | AI features | Vitest + fake `claude` executable | M9 |
 | End-to-end smoke | Playwright `_electron` | M3 |
 
