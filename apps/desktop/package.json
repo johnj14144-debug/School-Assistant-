@@ -21,6 +21,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@fullcalendar/react": "^7.1.0",
     "@sa/core": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
@@ -37,6 +38,7 @@
     "react-dom": "^19.3.0",
     "react-router": "^8.4.0",
     "tailwindcss": "^4.3.3",
+    "temporal-polyfill": "^1.0.5",
     "vite": "^7.3.6"
   }
 }

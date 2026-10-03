@@ -7,11 +7,14 @@ import { cn } from '../../lib/cn';
 import { formatTime } from '../../lib/dates';
 import { useLiveQuery } from '../../lib/useIpc';
 import { useNow } from '../../lib/useNow';
+import { plannedTaskId } from '../calendar/events';
 import { QuickAddInput } from '../tasks/QuickAddInput';
 import { TaskRow } from '../tasks/TaskRow';
 import { useTaskActions } from '../timer/TaskActions';
 import { elapsedSeconds, TotalVsEstimate } from '../timer/TimerBar';
 import { TodayList } from './TodayList';
+import { TodaySchedule } from './TodaySchedule';
+import { useTodayAgenda } from './useTodayAgenda';
 
 function BigButton({
   onClick,
@@ -43,10 +46,13 @@ function BigButton({
 function NowCard({
   timer,
   next,
+  planned,
   now,
 }: {
   timer: TimerState | null;
   next: TaskListItem | undefined;
+  /** `next` is the task of the block planned for now. */
+  planned: boolean;
   now: Date;
 }) {
   const { start, pause, resume, stop, complete, startEarlier } = useTaskActions();
@@ -58,7 +64,9 @@ function NowCard({
       <div className="rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">
         {next ? (
           <>
-            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">Up next</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+              {planned ? 'Planned now' : 'Up next'}
+            </p>
             <Link
               to={`/tasks/${next.id}`}
               className="mt-1 block text-2xl font-semibold hover:text-indigo-700 dark:hover:text-indigo-300"
@@ -167,7 +175,13 @@ export function TodayPage() {
         ) / 60_000
       : 0;
   const focusToday = (data?.focusMinClosed ?? 0) + runningToday;
-  const next = data?.tasks.find((t) => t.attention !== 'background') ?? data?.tasks[0];
+  const agenda = useTodayAgenda(now);
+  // The current block's task comes first; otherwise the top of the Today list.
+  const planned = plannedTaskId(agenda?.current ?? null);
+  const next =
+    (planned ? open?.find((t) => t.id === planned) : undefined) ??
+    data?.tasks.find((t) => t.attention !== 'background') ??
+    data?.tasks[0];
   const notOnToday = (open ?? []).filter((t) => t.todayOrder === null);
 
   return (
@@ -180,8 +194,9 @@ export function TodayPage() {
       {error && <p className="mt-6 text-sm text-red-700">{error}</p>}
 
       <div className="mt-8">
-        <NowCard timer={timer} next={next} now={now} />
+        <NowCard timer={timer} next={next} planned={next?.id === planned} now={now} />
       </div>
+      {agenda && <TodaySchedule agenda={agenda} now={now} />}
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Today’s list</h2>

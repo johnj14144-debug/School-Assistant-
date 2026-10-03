@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcEvent, RendererApi } from '../shared/ipc';
 
 /** Event names the renderer may listen to (a sandboxed preload can't import shared/ipc.ts). */
-const events: readonly IpcEvent[] = ['tasks:changed'];
+const events: readonly IpcEvent[] = ['tasks:changed', 'calendar:changed'];
 
 const api: RendererApi = {
   invoke: (channel, input) => ipcRenderer.invoke(channel, input),

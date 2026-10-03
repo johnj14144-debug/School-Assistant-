@@ -85,4 +85,44 @@ describe('School Assistant (built app)', () => {
     await app.close();
     expect(pageErrors).toEqual([]);
   });
+
+  it('sets up a routine and plans a block that the Today page runs', async () => {
+    const { app, page } = await launch();
+
+    // A starter routine from the Routine page, then the calendar shows it.
+    await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+    await page.getByRole('heading', { name: 'Calendar' }).waitFor();
+    await page.getByRole('link', { name: 'Routine' }).click();
+    await page.getByRole('button', { name: 'Add a starter routine' }).click();
+    await page.getByText('Evening routine').waitFor();
+    const routine = await invoke(page, 'fixed-event:list');
+    expect(routine.find((e) => e.kind === 'sleep')).toMatchObject({
+      startLocal: '23:00',
+      endLocal: '06:30',
+    });
+    await page.getByRole('link', { name: 'Calendar' }).first().click();
+    await page.locator('.sa-fixed-meal').first().waitFor();
+
+    // A block for a task over the current time. The routine goes first, so the block can't
+    // collide with it at whatever hour the test runs.
+    for (const event of routine) await invoke(page, 'fixed-event:delete', { id: event.id });
+    const task = await invoke(page, 'task:create', { title: 'Planned task' });
+    const now = Date.now();
+    const block = await invoke(page, 'block:create', {
+      taskId: task.id,
+      startAt: new Date(now - 10 * 60_000).toISOString(),
+      endAt: new Date(now + 50 * 60_000).toISOString(),
+    });
+    expect(block.source).toBe('manual');
+
+    // The Today page offers the planned task and starts it.
+    await page.getByRole('link', { name: 'Today', exact: true }).click();
+    const schedule = page.getByRole('region', { name: 'Schedule' });
+    await schedule.getByText('Planned task').first().waitFor();
+    await schedule.getByRole('button', { name: 'Start', exact: true }).click();
+    await page.getByTestId('timer-bar').getByText('Planned task').waitFor();
+
+    await app.close();
+    expect(pageErrors).toEqual([]);
+  });
 });

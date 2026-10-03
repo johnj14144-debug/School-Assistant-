@@ -169,3 +169,59 @@ export const timeSessions = sqliteTable(
     ),
   ],
 );
+
+/**
+ * Fixed events: classes, sleep, meals, hygiene and anything else that recurs. Times are wall
+ * clock in the event's own zone (ADR 0007); core's expandFixedEvents turns them into instants.
+ */
+export const fixedEvents = sqliteTable(
+  'fixed_event',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    kind: text('kind', { enum: ['class', 'sleep', 'meal', 'hygiene', 'other'] }).notNull(),
+    courseId: text('course_id').references(() => courses.id, { onDelete: 'set null' }),
+    location: text('location').notNull().default(''),
+    /** First day, `YYYY-MM-DD` (RRULE's DTSTART). */
+    startDate: text('start_date').notNull(),
+    /** `HH:mm`; an end at or before the start means the next day. */
+    startLocal: text('start_local').notNull(),
+    endLocal: text('end_local').notNull(),
+    /** RFC 5545 RRULE subset; null = once. */
+    rrule: text('rrule'),
+    timeZone: text('time_zone').notNull(),
+    /** Skipped occurrence dates, JSON `["YYYY-MM-DD", …]`. */
+    exceptions: text('exceptions', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    index('fixed_event_course_idx').on(t.courseId),
+    check('fixed_event_kind', sql`${t.kind} in ('class', 'sleep', 'meal', 'hygiene', 'other')`),
+  ],
+);
+
+/** Planned time on the calendar, by hand (M4) or by the planner (M5). */
+export const blocks = sqliteTable(
+  'block',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    startAt: text('start_at').notNull(),
+    endAt: text('end_at').notNull(),
+    locked: integer('locked', { mode: 'boolean' }).notNull().default(false),
+    source: text('source', { enum: ['manual', 'planner'] })
+      .notNull()
+      .default('manual'),
+    reason: text('reason').notNull().default(''),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [
+    index('block_task_idx').on(t.taskId),
+    index('block_start_idx').on(t.startAt),
+    check('block_source', sql`${t.source} in ('manual', 'planner')`),
+    check('block_order', sql`julianday(${t.endAt}) > julianday(${t.startAt})`),
+  ],
+);

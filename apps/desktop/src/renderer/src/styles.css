@@ -10,3 +10,34 @@ body {
   font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Calendar (FullCalendar's breezy theme): fixed events keep the theme's soft tint; planned
+   blocks are solid so they stand out from the routine. The doubled class outranks the theme's
+   own (hashed, single-class) rules, hover included. */
+.sa-block.sa-block,
+.sa-block.sa-block:hover,
+.sa-block.sa-block:active {
+  background-color: var(--fc-event-color);
+}
+
+.sa-block.sa-done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.sa-block.sa-conflict {
+  outline: 2px solid #f59e0b;
+  outline-offset: -2px;
+}
+
+.sa-block.sa-running {
+  box-shadow: 0 0 0 2px #10b981;
+}
+
+/* The theme's dark palette is slate; match the app's zinc surfaces. */
+@media not print {
+  [data-color-scheme="dark"] {
+    --fc-breezy-background: #18181b;
+    --fc-breezy-popover: #27272a;
+  }
+}

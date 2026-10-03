@@ -31,6 +31,13 @@ describe('createHandlers', () => {
     expect(await handlers['task:list']({ status: 'open' })).toEqual([]);
     expect(await handlers['timer:state']()).toEqual({ focus: null, paused: null, background: [] });
     expect(await handlers['backup:status']()).toMatchObject({ folder: p.defaultBackupFolder });
+    expect(await handlers['fixed-event:list']()).toEqual([]);
+    expect(
+      await handlers['calendar:range']({
+        from: '2026-10-05T05:00:00.000Z',
+        to: '2026-10-06T05:00:00.000Z',
+      }),
+    ).toMatchObject({ occurrences: [], blocks: [] });
     if (runtime.ok) runtime.database.close();
   });
 

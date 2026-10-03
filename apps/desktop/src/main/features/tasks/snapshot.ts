@@ -96,9 +96,13 @@ export function formatTime(iso: string, now = new Date()): string {
 }
 
 /** "Calc HW (2:00 PM – 2:45 PM)" for error messages, in the laptop's zone. */
-export function describeSession(title: string, session: Pick<TimeSession, 'startAt' | 'endAt'>) {
+export function describeSession(
+  title: string,
+  session: Pick<TimeSession, 'startAt' | 'endAt'>,
+  now = new Date(),
+) {
   const end = session.endAt
     ? new Date(session.endAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     : 'now';
-  return `${title} (${formatTime(session.startAt)} – ${end})`;
+  return `${title} (${formatTime(session.startAt, now)} – ${end})`;
 }

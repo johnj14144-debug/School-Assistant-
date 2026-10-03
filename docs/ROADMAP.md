@@ -79,15 +79,15 @@ max grade.
 **AC:** the user can run their whole day through the Today list and timer; sessions survive an
 app restart; backfill works; history shows estimate vs actual. **Start daily use here.**
 
-## M4 — Calendar & routine
+## M4 — Calendar & routine ✅
 
-- [ ] Core `time/`: recurrence expansion with IANA zones (ADR 0007), availability windows;
+- [x] Core `time/`: recurrence expansion with IANA zones (ADR 0007), availability windows;
       tests across the March and November DST changes
-- [ ] FullCalendar week/day views in the renderer
-- [ ] Fixed events with recurrence: UH class schedule, **7.5 h sleep floor**, meals, hygiene,
+- [x] FullCalendar week/day views in the renderer
+- [x] Fixed events with recurrence: UH class schedule, **7.5 h sleep floor**, meals, hygiene,
       custom; exceptions (cancelled class)
-- [ ] Manual blocks: create, drag, resize, lock
-- [ ] Today page shows the current block and next up alongside the Today list
+- [x] Manual blocks: create, drag, resize, lock
+- [x] Today page shows the current block and next up alongside the Today list
 
 **AC:** the week shows classes, sleep and meals correctly across a DST change; the user can
 plan a day by hand and run it from the Today page.

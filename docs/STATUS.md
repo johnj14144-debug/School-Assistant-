@@ -2,50 +2,55 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 4: M3 done)_
+_Last updated: 2026-10-03 (session 5: M4 done)_
 
 ## Where things stand
 
-- **M1–M2 are done:** database, backups, log, grade math, and the Grade Calc screens (see the
-  ROADMAP; HIST 4318 from the owner's syllabus is the reference course).
-- **M3 is done:** tasks, the timer and the Today list. **The owner can start daily use now.**
-  - Core: `tasks/` (schemas, `parseDuration`/`formatMinutes`, `parseQuickAdd`, session rules
-    `findConflict`/`planStart`/`planMoveStart`, history `ownMinutes`/`rollupMinutes`/
-    `typeGroups`) and `time/` (local dates and the date/time parsing moved out of the bulk-add
-    parser, which now imports it).
-  - DB: `task` and `time_session` (migration `0002_tasks`, plain CREATE TABLEs; the upgrade test
-    covers v2 → latest). Completion lives on the task (`status`, `completed_at`,
-    `completion_note`), not in a separate table (ADR 0009).
-  - Main: `TasksService` (CRUD, subtasks, finish/reopen, Today list, history) and `TimerService`
-    (start/pause/resume/stop, "I started at…", typed-in and edited sessions); `tasks:changed`
-    event to the window; the tray menu shows the timer with Pause/Resume/Stop.
-  - Renderer: timer bar on every page, Today page (Now card, hand-ordered list with drag or
-    Alt+↑/↓, quick add, done today), Tasks page, task page (subtasks, sessions table, note),
-    History page, Ctrl+K palette, finish and "I started at…" dialogs.
-  - `apps/desktop/e2e/smoke.e2e.ts` (Playwright, `pnpm e2e`): launch, navigate, quick add, start,
-    restart (timer still running), stop. CI now builds, fetches Electron and runs it on Ubuntu
-    (xvfb) and Windows.
-- **AC check (headless Electron):** added four tasks with Ctrl+K (course, type, estimate, due,
-  quantity all parsed), started the first "15 min ago", ran laundry as a background task,
-  switched tasks and moved the switch 5 minutes earlier (the previous task's time dropped from
-  15 to 10 minutes), paused and resumed, finished with a note, reordered the list with Alt+↑,
-  restarted the app with the timer running (still running), typed in a 75-minute session and
-  moved its start, and checked History (estimate vs actual per course + type and per task). No
-  page errors.
-- **The owner confirmed the M3 timer and Today-list behavior** (Q9 in VISION's decisions log).
-  CI on the PR ran the smoke test green on Ubuntu and Windows.
+- **M1–M3 are done** (database, backups, log, Grade Calc, tasks, timer, Today list). The owner
+  can use the app daily.
+- **M4 is done:** calendar and routine (ADR 0010).
+  - Core `time/`: `zone.ts` (Intl-based; `Temporal` is not in Node 22), `recurrence.ts` (RRULE
+    subset), `expand.ts` (`expandFixedEvents`, sleep-floor extension, `availability`,
+    `nightsWithoutSleep`). Core `calendar/`: schemas, `fixedEventProblem`,
+    `findBlockConflict`, `agendaNow`. DST tests cover Mar 8 / Nov 1 2026.
+  - DB: `fixed_event` and `block` (migration `0003_calendar`, plain CREATE TABLEs; upgrade test
+    v3 → latest). Setting `calendar.sleepFloorMin` (450, can only go up; no UI yet).
+  - Main: `CalendarService` + handlers (`fixed-event:*`, `block:*`, `calendar:range`), event
+    `calendar:changed`; `useLiveQuery` now reloads on it too.
+  - Renderer: Calendar page (FullCalendar 7, breezy/indigo, week/day, select → new block, drop a
+    task from the side list, drag/resize, block and occurrence dialogs, warnings), Routine page
+    (`/calendar/routine`, starter routine, form with day toggles, skipped dates), Today page
+    `TodaySchedule` (Now / Next up / today's schedule) and "Planned now" in the big card.
+  - `pnpm e2e` now has a second test: starter routine → calendar → block over now → Start from
+    Today.
+- **AC check (headless Electron, TZ=America/Chicago):** starter routine + MWF and TTh classes;
+  the week view keeps classes at 10:00 / 1:00 and sleep at 11 PM–6:30 AM around the fall-back
+  change; the Mar 14, 2027 night shows sleep extended 60 min; dragged a task in (90-min block),
+  selected 11:00–11:55 for another, a drag into lunch snapped back with "That overlaps Lunch…";
+  block dialog (Start / Lock / Delete); a block over now showed on Today as Now and Start ran
+  its timer. Dark mode checked. No page errors.
+- `pnpm check` and `pnpm e2e` pass.
 
-## Next session: M4 — Calendar & routine
+## Next session: M5 — Scheduler v1: plan the week
 
-Start with core `time/`: recurrence expansion for fixed events stored as local time + IANA zone
-(ADR 0007) with tests across the March and November DST changes, then availability windows
-with the 7.5 h sleep floor. Check first whether `Temporal` exists in Node 22 (tests) and
-Electron 44 (app); if not, write the small zone helper ADR 0007 describes (Intl offsets), not
-`Date` arithmetic on local time. Then the FixedEvent table and screens, FullCalendar views,
-manual blocks, and the Today page's "current block / next up". See ROADMAP M4 for the AC.
+Start in core `scheduler/` with `availability()` from `time/expand.ts` as input (locked and
+manual blocks are busy too; reuse `findBlockConflict`'s rules). Add `fast-check` for the
+property tests. Planner blocks use `source: 'planner'` and fill `reason`; see ROADMAP M5.
 
 ## Gotchas learned so far
 
+- **Calendar (M4):** every block write goes through core's `findBlockConflict`; fixed events
+  through `fixedEventProblem`. `range()` expands over the blocks' span too, so a block reaching
+  outside the range still sees its conflicts. FullCalendar gets its events only from
+  `calendar:range`; drags call IPC and `info.revert()` on refusal, and a dropped task's
+  temporary event is reverted before `block:create` (the real block comes back via the event).
+- **FullCalendar 7:** imports are `@fullcalendar/react`, `/timegrid`, `/interaction`,
+  `/themes/breezy` plus `skeleton.css`, `themes/breezy/theme.css` and a palette CSS;
+  `temporal-polyfill` is a required peer. Dark mode follows the `colorScheme` option
+  (`useColorScheme`). Its classes are hashed, so style through `className` on events (`sa-*`)
+  and its CSS variables; slot labels are `[data-time="09:00:00"]` in tests (text is "9am").
+- **Headless checks:** timestamps printed from the Node test script are in the script's zone
+  (UTC), not the app's; format them inside `page.evaluate` or trust the app's own text.
 - **Timer data rules (ADR 0009):** every session write goes through core's `findConflict` /
   `planStart` / `planMoveStart`; don't insert sessions directly. Task and timer services
   normalize instants with `toISOString()` so they compare as text; zod's `iso.datetime()` also
@@ -152,5 +157,7 @@ manual blocks, and the Today page's "current block / next up". See ROADMAP M4 fo
 
 ## Open questions for the user
 
-- None right now. (Q9, the timer and Today-list behavior chosen in M3, was confirmed by the
-  owner: "those all work". See VISION's decisions log.)
+- None right now. (Q10, the calendar behavior chosen in M4, was confirmed with two changes,
+  both made: background blocks can't overlap classes or `other` commitments such as tutoring
+  and fraternity chapter, and the starter routine has two one-hour meals, breakfast 7–8 AM and
+  dinner 8–9 PM. See VISION's decisions log.)

@@ -1,6 +1,7 @@
 import { ipcContract } from '../shared/ipc';
 import { appHandlers } from './features/app/handlers';
 import { backupHandlers } from './features/backup/handlers';
+import { calendarHandlers } from './features/calendar/handlers';
 import { gradesHandlers } from './features/grades/handlers';
 import { tasksHandlers } from './features/tasks/handlers';
 import type { IpcHandlers } from './ipc';
@@ -20,6 +21,7 @@ export function createHandlers(paths: AppPaths, runtime: Runtime): IpcHandlers {
     ...backupHandlers(services.backup),
     ...gradesHandlers(services.grades),
     ...tasksHandlers(services.tasks, services.timer),
+    ...calendarHandlers(services.calendar),
   };
 }
 

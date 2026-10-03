@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { CalendarPage } from './features/calendar/CalendarPage';
+import { RoutinePage } from './features/calendar/RoutinePage';
 import { CoachPage } from './features/coach/CoachPage';
 import { CoursePage } from './features/grades/CoursePage';
 import { GradesPage } from './features/grades/GradesPage';
@@ -42,6 +43,7 @@ export const routes: AppRoute[] = [
 
 /** Pages reached from inside other pages (no sidebar entry). */
 export const pageRoutes: { path: string; element: ReactElement }[] = [
+  { path: '/calendar/routine', element: <RoutinePage /> },
   { path: '/grades/new', element: <NewCoursePage /> },
   { path: '/grades/:courseId', element: <CoursePage /> },
   { path: '/tasks/history', element: <HistoryPage /> },

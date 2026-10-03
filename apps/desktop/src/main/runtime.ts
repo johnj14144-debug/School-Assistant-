@@ -1,6 +1,7 @@
 import { BackupService } from './db/backup';
 import { type AppDatabase, openDatabase } from './db/database';
 import { SettingsService } from './db/settings';
+import { CalendarService } from './features/calendar/service';
 import { GradesService } from './features/grades/service';
 import { TasksService } from './features/tasks/service';
 import { TimerService } from './features/tasks/timer';
@@ -19,8 +20,11 @@ export interface Services {
   grades: GradesService;
   tasks: TasksService;
   timer: TimerService;
+  calendar: CalendarService;
   /** Fires after any change to tasks or the timer, so the window and tray can refresh. */
   taskChanges: ChangeSignal;
+  /** Fires after any change to fixed events or blocks. */
+  calendarChanges: ChangeSignal;
 }
 
 /** A tiny listener list. A failing listener is logged and doesn't stop the others. */
@@ -67,6 +71,7 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
   }
   const settings = new SettingsService(database.db, log);
   const taskChanges = new ChangeSignal(log);
+  const calendarChanges = new ChangeSignal(log);
   const tasks = new TasksService({ db: database.db, settings, onChange: taskChanges.emit });
   const services: Services = {
     settings,
@@ -79,7 +84,9 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
     grades: new GradesService({ db: database.db }),
     tasks,
     timer: new TimerService({ db: database.db, settings, tasks, onChange: taskChanges.emit }),
+    calendar: new CalendarService({ db: database.db, settings, onChange: calendarChanges.emit }),
     taskChanges,
+    calendarChanges,
   };
   log.info(`Database ready: ${paths.dbFile}`);
   return { ok: true, database, services };
