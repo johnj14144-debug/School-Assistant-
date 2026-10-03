@@ -8,6 +8,7 @@ import { formatTime } from '../../lib/dates';
 import { useLiveQuery } from '../../lib/useIpc';
 import { useNow } from '../../lib/useNow';
 import { plannedTaskId } from '../calendar/events';
+import { BehindBanner } from '../planner/BehindBanner';
 import { QuickAddInput } from '../tasks/QuickAddInput';
 import { TaskRow } from '../tasks/TaskRow';
 import { useTaskActions } from '../timer/TaskActions';
@@ -154,6 +155,9 @@ function NowCard({
   );
 }
 
+/** A block starting this soon is offered on the big card. */
+const SOON_MS = 10 * 60_000;
+
 /** Run the day: the Today list in your order, a big Start/Stop, and what got done. */
 export function TodayPage() {
   const now = useNow();
@@ -176,10 +180,16 @@ export function TodayPage() {
       : 0;
   const focusToday = (data?.focusMinClosed ?? 0) + runningToday;
   const agenda = useTodayAgenda(now);
-  // The current block's task comes first; otherwise the top of the Today list.
+  // The current block's task comes first, then a block starting in the next few minutes (a
+  // re-plan starts on the 5-minute grid), then the top of the Today list.
   const planned = plannedTaskId(agenda?.current ?? null);
+  const soon =
+    agenda?.next && Date.parse(agenda.next.startAt) - now.getTime() <= SOON_MS
+      ? plannedTaskId(agenda.next)
+      : null;
   const next =
     (planned ? open?.find((t) => t.id === planned) : undefined) ??
+    (soon ? open?.find((t) => t.id === soon) : undefined) ??
     data?.tasks.find((t) => t.attention !== 'background') ??
     data?.tasks[0];
   const notOnToday = (open ?? []).filter((t) => t.todayOrder === null);
@@ -193,6 +203,7 @@ export function TodayPage() {
       </p>
       {error && <p className="mt-6 text-sm text-red-700">{error}</p>}
 
+      <BehindBanner />
       <div className="mt-8">
         <NowCard timer={timer} next={next} planned={next?.id === planned} now={now} />
       </div>

@@ -49,3 +49,11 @@ export function useLiveQuery<C extends IpcChannel>(channel: C, input?: IpcInput<
   useIpcEvent('calendar:changed', () => void query.reload());
   return query;
 }
+
+/** Calls `reload` every `ms` (for views that change with the clock, like "behind"). */
+export function usePolling(reload: () => unknown, ms: number) {
+  useEffect(() => {
+    const id = setInterval(() => void reload(), ms);
+    return () => clearInterval(id);
+  }, [reload, ms]);
+}
