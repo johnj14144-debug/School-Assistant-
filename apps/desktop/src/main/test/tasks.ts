@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import { openDatabase } from '../db/database';
 import { SettingsService } from '../db/settings';
 import { GradesService } from '../features/grades/service';
+import type { PlanEventListener } from '../features/planner/events';
 import { TasksService } from '../features/tasks/service';
 import { TimerService } from '../features/tasks/timer';
 import { fakeClock, stubLogger } from './helpers';
@@ -22,8 +23,11 @@ export function setupTasks(start = '2026-10-07T15:00:00.000Z', file = ':memory:'
   const database = openDatabase(file);
   const settings = new SettingsService(database.db, stubLogger(), clock.now);
   const onChange = vi.fn();
-  const tasks = new TasksService({ db: database.db, settings, now: clock.now, onChange });
-  const timer = new TimerService({ db: database.db, settings, tasks, now: clock.now, onChange });
+  // What the services tell the planner (setupCalendar connects it).
+  const onPlanEvent = vi.fn<PlanEventListener>();
+  const deps = { db: database.db, settings, now: clock.now, onChange, onPlanEvent };
+  const tasks = new TasksService(deps);
+  const timer = new TimerService({ ...deps, tasks });
   const grades = new GradesService({ db: database.db, now: clock.now });
   // Inputs go through the IPC schemas, so defaults apply as in the app.
   const task = (title: string, extra: object = {}) =>
@@ -45,6 +49,7 @@ export function setupTasks(start = '2026-10-07T15:00:00.000Z', file = ':memory:'
     tasks,
     timer,
     onChange,
+    onPlanEvent,
     task,
     update,
     complete,

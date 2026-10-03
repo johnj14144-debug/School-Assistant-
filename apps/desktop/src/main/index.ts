@@ -23,6 +23,7 @@ let quitting = false;
 let runtime: Runtime | null = null;
 let stopBackups: (() => void) | null = null;
 let trayTicker: ReturnType<typeof setInterval> | null = null;
+let planTicker: ReturnType<typeof setInterval> | null = null;
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL;
 
@@ -109,6 +110,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     stopBackups?.();
     if (trayTicker) clearInterval(trayTicker);
+    if (planTicker) clearInterval(planTicker);
     // Closing checkpoints the WAL into the main file.
     if (runtime?.ok) runtime.database.close();
     log.info('School Assistant quit');
@@ -135,8 +137,12 @@ if (!app.requestSingleInstanceLock()) {
         trayHandle.refresh();
       });
       services.calendarChanges.on(() => sendToWindow(mainWindow, 'calendar:changed'));
+      services.replans.on((run) => sendToWindow(mainWindow, 'planner:replanned', run));
       // The tray shows the running timer's minutes.
       trayTicker = setInterval(trayHandle.refresh, 30_000);
+      // A timer running past its block pushes later work (M6).
+      const { planner } = services;
+      planTicker = setInterval(() => planner.tick(), 60_000);
     }
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type PlanInput, type PlannedBlock, planWeek } from './plan';
+import { type PlanInput, type PlannedBlock, planWeek, replan } from './plan';
 import { fixedBetween, local, minutesOf, ms, overlaps, planTask, ZONE } from './test-fixtures';
 
 // Mon Oct 5, 2026, 8:00 AM in Houston (breakfast just ended).
@@ -533,6 +533,40 @@ describe('a realistic week (M5 acceptance)', () => {
     for (const a of focus) for (const b of focus) if (a !== b) expect(overlaps(a, b)).toBe(false);
     const sleep = fixed.filter((f) => f.kind === 'sleep');
     for (const b of blocks) for (const s of sleep) expect(overlaps(b, s)).toBe(false);
+  });
+
+  it('re-plans the week after a 30-minute late start in well under a second (M6)', () => {
+    const first = plan({ tasks });
+    const [late, ...rest] = first.blocks.filter((b) => b.kind === 'work');
+    const later = new Date(ms(late?.startAt ?? '') + 30 * 60_000);
+    const previous = first.blocks
+      .map((b, i) => ({
+        id: `p${i}`,
+        taskId: b.taskId,
+        startAt: b.startAt,
+        endAt: b.endAt,
+        kind: b.kind,
+      }))
+      .filter((p) => p.startAt >= later.toISOString());
+    const started = Date.now();
+    const out = replan({
+      now: later,
+      until: new Date(UNTIL),
+      timeZone: ZONE,
+      tasks,
+      fixed,
+      kept: [],
+      previous,
+      startNowTaskId: late?.taskId,
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(out.fallback).toBe('none');
+    expect(out.warnings).toEqual([]);
+    // Only the late task's work moved.
+    expect(rest.length).toBeGreaterThan(30);
+    const moved = out.blocks.filter((b) => b.previousId === undefined);
+    expect(new Set(moved.map((b) => b.taskId))).toEqual(new Set([late?.taskId]));
+    expect(out.blocks.filter((b) => b.previousId)).toHaveLength(previous.length);
   });
 
   it('mixes subjects instead of doing one course at a time', () => {

@@ -30,6 +30,7 @@ import type { z } from 'zod';
 import type { Db } from '../../db/database';
 import { blocks, courses, fixedEvents, tasks, timeSessions } from '../../db/schema';
 import type { SettingsService } from '../../db/settings';
+import type { PlanEventListener } from '../planner/events';
 import { describeSession, normalizeInstant } from '../tasks/snapshot';
 
 export interface CalendarDeps {
@@ -41,6 +42,8 @@ export interface CalendarDeps {
   displayZone?: () => string;
   /** Called after every change to fixed events or blocks. */
   onChange?: () => void;
+  /** Told about every change by hand: the routine and blocks shape the plan (M6). */
+  onPlanEvent?: PlanEventListener;
 }
 
 const DAY_MS = 86_400_000;
@@ -76,7 +79,13 @@ export class CalendarService {
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
     this.displayZone = deps.displayZone ?? (() => Intl.DateTimeFormat().resolvedOptions().timeZone);
-    this.changed = deps.onChange ?? (() => {});
+    const onChange = deps.onChange ?? (() => {});
+    const planEvent = deps.onPlanEvent ?? (() => {});
+    // Every change here is by hand, and each one can change the plan.
+    this.changed = () => {
+      onChange();
+      planEvent({ kind: 'edit' });
+    };
   }
 
   // Fixed events

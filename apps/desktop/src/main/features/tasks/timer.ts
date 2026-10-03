@@ -16,6 +16,7 @@ import type { z } from 'zod';
 import type { Db } from '../../db/database';
 import { timeSessions } from '../../db/schema';
 import type { SettingsService } from '../../db/settings';
+import type { PlanEventListener } from '../planner/events';
 import type { TasksService } from './service';
 import {
   describeSession,
@@ -35,6 +36,8 @@ export interface TimerDeps {
   now?: () => Date;
   newId?: () => string;
   onChange?: () => void;
+  /** Told about changes that affect the plan: stopping early, edited sessions (M6). */
+  onPlanEvent?: PlanEventListener;
 }
 
 /**
@@ -47,12 +50,14 @@ export class TimerService {
   private readonly now: () => Date;
   private readonly newId: () => string;
   private readonly changed: () => void;
+  private readonly planEvent: PlanEventListener;
 
   constructor(private readonly deps: TimerDeps) {
     this.db = deps.db;
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
     this.changed = deps.onChange ?? (() => {});
+    this.planEvent = deps.onPlanEvent ?? (() => {});
   }
 
   state(): TimerState {
@@ -173,7 +178,8 @@ export class TimerService {
 
   /**
    * Stops a task's timer (default: the focus task). With nothing running, it clears the paused
-   * task instead.
+   * task instead. Stopping ends the task's block there, like finishing early (Q12); pausing
+   * doesn't.
    */
   stop(taskId?: string): TimerState {
     const snap = loadSnapshot(this.db, this.now());
@@ -183,7 +189,9 @@ export class TimerService {
       : open.filter((s) => !snap.isBackground(s.taskId)).at(-1);
     const paused = this.deps.settings.get('timer.paused');
     if (session) {
-      this.closeAt(session, this.now().toISOString());
+      const at = this.now().toISOString();
+      this.closeAt(session, at);
+      this.planEvent({ kind: 'finish', taskIds: [session.taskId], at });
     } else if (paused && (!taskId || paused.taskId === taskId)) {
       this.deps.settings.set('timer.paused', null);
     } else {
@@ -209,6 +217,7 @@ export class TimerService {
     };
     this.db.insert(timeSessions).values(session).run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
     return session;
   }
 
@@ -225,6 +234,7 @@ export class TimerService {
       .where(eq(timeSessions.id, id))
       .run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
     return this.state();
   }
 
@@ -232,6 +242,7 @@ export class TimerService {
     this.requireSession(id);
     this.db.delete(timeSessions).where(eq(timeSessions.id, id)).run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
   }
 
   private rules(snap: TaskSnapshot) {

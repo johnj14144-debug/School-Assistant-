@@ -14,6 +14,9 @@ const run = (fields: Partial<PlanRun> = {}): PlanRun => ({
   blockCount: 23,
   plannedMin: 1880,
   warnings: [],
+  trigger: 'plan',
+  fallback: 'none',
+  changes: [],
   ...fields,
 });
 

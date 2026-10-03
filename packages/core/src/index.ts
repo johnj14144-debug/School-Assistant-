@@ -5,6 +5,7 @@ export * from './grades/letter';
 export * from './grades/parse-assignments';
 export * from './grades/series';
 export * from './retention/retention';
+export * from './scheduler/changes';
 export * from './scheduler/plan';
 export * from './scheduler/prepare';
 export * from './scheduler/schemas';

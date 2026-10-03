@@ -22,6 +22,8 @@ import {
   gradeCategorySchema,
   historyViewSchema,
   idSchema,
+  type PlanRun,
+  planBehindSchema,
   planRunSchema,
   sessionCreateSchema,
   sessionUpdateSchema,
@@ -169,9 +171,16 @@ export const ipcContract = {
   /** Occurrences and blocks overlapping [from, to) (at most 62 days). */
   'calendar:range': { input: calendarRangeInputSchema, output: calendarRangeSchema },
 
-  // Planner (M5)
-  /** Replaces the planner's future blocks with a plan for the next 7 days. */
+  // Planner (M5–M6)
+  /** Replaces the planner's future blocks with a fresh plan for the next 7 days. */
   'planner:plan-week': { input: z.void(), output: planRunSchema },
+  /**
+   * "Re-plan now": keeps what still works of the plan, moves what must (a block that should have
+   * started gets the first free time) and fills the next 7 days.
+   */
+  'planner:replan': { input: z.void(), output: planRunSchema },
+  /** A planned block under way that isn't being worked on (after a 10-minute grace), or null. */
+  'planner:behind': { input: z.void(), output: planBehindSchema.nullable() },
   /** Removes the planner's future blocks (locked and under-way ones stay). */
   'planner:clear': { input: z.void(), output: z.object({ removed: z.number().int() }) },
   /** The last plan's summary and warnings; null before the first plan or after clearing. */
@@ -200,6 +209,8 @@ export interface IpcEvents {
   'tasks:changed': undefined;
   /** Fixed events or blocks changed (by hand or by the planner). */
   'calendar:changed': undefined;
+  /** The plan was re-planned (by "Re-plan now" or on its own): what moved, for a toast. */
+  'planner:replanned': PlanRun;
 }
 export type IpcEvent = keyof IpcEvents;
 
