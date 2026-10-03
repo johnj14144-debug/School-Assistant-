@@ -32,7 +32,8 @@ _Last updated: 2026-10-03 (session 4: M3 done)_
   restarted the app with the timer running (still running), typed in a 75-minute session and
   moved its start, and checked History (estimate vs actual per course + type and per task). No
   page errors.
-- **The owner should try a real day with it** and answer Q9 (below).
+- **The owner confirmed the M3 timer and Today-list behavior** (Q9 in VISION's decisions log).
+  CI on the PR ran the smoke test green on Ubuntu and Windows.
 
 ## Next session: M4 — Calendar & routine
 
@@ -151,9 +152,5 @@ manual blocks, and the Today page's "current block / next up". See ROADMAP M4 fo
 
 ## Open questions for the user
 
-- **Q9: does the timer and Today list behave the way you want?** M3 made these choices (all
-  written down in VISION under "How the timer and Today list behave"): one focus task at a time
-  with background tasks alongside; Pause keeps the task ready to resume while Stop clears it;
-  Done asks for an optional note; unfinished tasks stay on the Today list until done or removed
-  (they carry over to tomorrow); "fri" means the next Friday, never today; a task due today is
-  added to the Today list. Say which to change after a day or two of use.
+- None right now. (Q9, the timer and Today-list behavior chosen in M3, was confirmed by the
+  owner: "those all work". See VISION's decisions log.)

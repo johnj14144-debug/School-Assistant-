@@ -57,8 +57,8 @@ the first brainstorm (2026-10-02) and the first review (2026-10-02; owner answer
   the essay to tomorrow, I'm sick") to add things or change the day.
 - **Daily rhythm:** morning plan message, evening review, weekly review.
 
-**How the timer and Today list behave** (chosen in M3; the owner can change any of this, see
-Q9 in the decisions log):
+**How the timer and Today list behave** (chosen in M3, confirmed by the owner; Q9 in the
+decisions log):
 - **One focus task at a time.** Starting a task stops the one that was running at that moment.
   Tasks marked *background* (laundry, a download) run alongside.
 - **Pause** keeps the task in the timer bar so one click resumes it; **Stop** clears it; **Done**
@@ -234,4 +234,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | — | Review pitches P1–P9 | All declined (see `docs/IDEAS.md`), including the pre-run usage estimate |
 | Q7 | Grade rules chosen in M1 (see Grade Calc) | Confirmed: "The rules are good" (2026-10-02) |
 | Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |
-| Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | **Pending:** the owner tries it and confirms or changes it |
+| Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | Confirmed: "those all work" (2026-10-03) |
