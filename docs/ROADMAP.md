@@ -106,13 +106,16 @@ focus blocks, never touches sleep, meets every feasible deadline.
 
 ## M6 — Scheduler v1: re-planning
 
-- [ ] Re-plan from now on late start, overrun, early finish, task edits, manual trigger; past
-      and in-progress work frozen; stickiness (minimal moves); locked blocks respected
+- [ ] Re-plan from now on overrun, early finish (re-pack the rest of the day, Q12), task edits
+      and the manual trigger; a late start only shows "behind" on Today (Q13); past and
+      in-progress work frozen; stickiness (minimal moves); locked blocks respected
 - [ ] "Re-plan now" action; a diff of what moved
-- [ ] Property tests for stability: a 30-minute late start moves only what it must
+- [ ] Property tests for stability: after a 30-minute late start, "Re-plan now" moves only what
+      it must
 
-**AC:** a 30-minute late start moves only what it must; an overrun pushes later work without
-touching sleep or locked blocks.
+**AC:** after a 30-minute late start, "Re-plan now" moves only what it must; an overrun pushes
+later work without touching sleep or locked blocks; finishing early pulls the rest of the day
+earlier.
 
 ## M7 — Estimation engine
 

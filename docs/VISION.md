@@ -44,7 +44,8 @@ the first brainstorm (2026-10-02) and the first review (2026-10-02; owner answer
   fills the same page automatically.
 - **Learns durations** from timer history ("Calc HW: you take 1.4× your guess, ~7 min/problem")
   and uses them to size future blocks.
-- **Re-plans live** when the user starts late, runs over, or finishes early.
+- **Re-plans live** when the user runs over or finishes early (the rest of the day is re-packed);
+  a late start only shows a reminder until the user asks to re-plan (owner decisions Q12–Q13).
 - **Calendar** showing everything.
 - **Breaks big tasks into smaller pieces**, but only when it helps. Not every task.
 - **Concurrent tasks** ("laundry-style"): a task with waiting time is modeled as hands-on steps
@@ -300,3 +301,5 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | Confirmed: "those all work" (2026-10-03) |
 | Q10 | Calendar behavior chosen in M4 (see Planner: "How the calendar behaves") | Confirmed with two changes (2026-10-03): background tasks can't overlap classes or commitments like tutoring and fraternity chapter; two meals, a full hour each: breakfast and a late dinner (8–9 PM) |
 | Q11 | Planner behavior chosen in M5 (see Planner: "How the planner behaves") | Confirmed with two changes (2026-10-03): tasks without an estimate are planned too (for a default length); tasks have hard and soft deadlines, so no task is without a due date. The rest (no daily cap, as early as possible, laundry steps within 30 minutes of their wait) is fine |
+| Q12 | Finishing a task early (asked before M6) | Re-pack the rest of the day: everything later today moves earlier, as tightly as it fits (2026-10-03) |
+| Q13 | A planned block not started on time (asked before M6) | Only remind: after a 10-minute grace, Today shows the plan is behind; nothing moves until "Re-plan now" (2026-10-03) |

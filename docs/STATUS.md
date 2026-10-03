@@ -2,7 +2,7 @@
 
 The handoff note between sessions. **Read this first and update it last.**
 
-_Last updated: 2026-10-03 (session 6: M5 done, owner's Q11 answer applied)_
+_Last updated: 2026-10-03 (session 6: M5 merged in #6; M6 prepared)_
 
 ## Where things stand
 
@@ -44,11 +44,33 @@ _Last updated: 2026-10-03 (session 6: M5 done, owner's Q11 answer applied)_
 
 ## Next session: M6 — Scheduler v1: re-planning
 
-Re-plan from now on a late start, an overrun, an early finish, task edits and a manual
-"Re-plan now", with a diff of what moved. Build on `planWeek`: blocks under way and the past are
-already frozen (kept); add stickiness (prefer each task's previous placements, e.g. score
-candidate slots by distance from the old block) and `planVersion` on blocks. Also decide what
-happens to a done task's future planner blocks (today they stay until the next plan).
+Owner decisions taken before the session (VISION Q12–Q13):
+- **Early finish → re-pack the rest of the day:** everything later today moves earlier, as
+  tightly as it fits (no stickiness for today's remaining blocks; later days stay sticky).
+- **Late start → only remind:** after a 10-minute grace, Today shows the plan is behind
+  ("Calc HW should have started 25 min ago") with **Re-plan now**; nothing moves on its own.
+- Not asked, from the roadmap AC: an **overrun pushes** later work (never into sleep, classes
+  or locked blocks); **task edits** (new task, estimate or due change, done) re-plan too.
+
+Plan for the session:
+1. Core `scheduler/replan.ts`: `replan(input, previous)` keeps each previous future planner
+   block that is still valid (no new overlap, its task still needs that much work, before a
+   hard due date), then places the remaining and displaced work with `placeFocus`/sequences in
+   the free time left; falls back to a full `planWeek` when keeping blocks costs a deadline.
+   An option `repackUntil` (end of today) drops stickiness for blocks before it (early finish).
+   The running task's open session counts as occupying time until its block's end or now +
+   a minimum (overrun pushes what overlaps).
+2. `diffPlans(before, after)`: moved / added / removed per task, for the UI.
+3. Main: `PlannerService.replan(reason)`; triggers from timer stop/complete (early finish →
+   repack today), timer running past its block end (overrun, checked on a 1-minute tick),
+   task create/update/delete and fixed-event changes; debounced; only when a plan exists
+   (`planner.lastRun`). `block.planVersion` (migration 0005) and `planner.lastChange`.
+4. Late start: `behindBy(now, blocks, sessions, grace)` in core; Today shows the banner with
+   Re-plan now. No automatic move.
+5. UI: "Re-plan now" (Calendar, Today, palette), a toast listing what moved.
+6. Tests: unit + fast-check stability properties (a late start then Re-plan now moves only the
+   late task's blocks and those it must displace; an overrun never touches sleep, classes or
+   locked blocks; re-packing keeps every rule from M5), service tests, an e2e step.
 
 ## Gotchas learned so far
 
