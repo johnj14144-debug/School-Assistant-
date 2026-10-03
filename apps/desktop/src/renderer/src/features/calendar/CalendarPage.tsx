@@ -17,7 +17,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useColorScheme } from '../../lib/useColorScheme';
 import { useLiveQuery } from '../../lib/useIpc';
-import { ClearPlanButton, PlanPanel, PlanWeekButton } from '../planner/PlanPanel';
+import { PlanButtons, PlanPanel } from '../planner/PlanPanel';
 import { useTaskActions } from '../timer/TaskActions';
 import { BlockDialog, NewBlockDialog, OccurrenceDialog, type Span } from './BlockDialogs';
 import { type CalendarItem, toEventInputs, weekAround } from './events';
@@ -136,8 +136,7 @@ export function CalendarPage() {
             Plan the week from your tasks, or drag across free time and drop tasks by hand.
           </p>
         </div>
-        <PlanWeekButton />
-        <ClearPlanButton />
+        <PlanButtons />
         <Link
           to="/calendar/routine"
           className="flex items-center gap-1.5 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"

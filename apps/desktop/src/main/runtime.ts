@@ -1,3 +1,4 @@
+import type { PlanRun } from '@sa/core';
 import { BackupService } from './db/backup';
 import { type AppDatabase, openDatabase } from './db/database';
 import { SettingsService } from './db/settings';
@@ -27,23 +28,25 @@ export interface Services {
   taskChanges: ChangeSignal;
   /** Fires after any change to fixed events or blocks. */
   calendarChanges: ChangeSignal;
+  /** Fires after every re-plan with what it did. */
+  replans: ChangeSignal<PlanRun>;
 }
 
 /** A tiny listener list. A failing listener is logged and doesn't stop the others. */
-export class ChangeSignal {
-  private readonly listeners = new Set<() => void>();
+export class ChangeSignal<T = void> {
+  private readonly listeners = new Set<(value: T) => void>();
 
   constructor(private readonly log: Logger) {}
 
-  on(listener: () => void): () => void {
+  on(listener: (value: T) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  emit = (): void => {
+  emit = (value: T): void => {
     for (const listener of this.listeners) {
       try {
-        listener();
+        listener(value);
       } catch (error) {
         this.log.error('A change listener failed', error);
       }
@@ -74,7 +77,22 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
   const settings = new SettingsService(database.db, log);
   const taskChanges = new ChangeSignal(log);
   const calendarChanges = new ChangeSignal(log);
-  const tasks = new TasksService({ db: database.db, settings, onChange: taskChanges.emit });
+  const replans = new ChangeSignal<PlanRun>(log);
+  // The planner follows changes to tasks, the timer and the calendar once a plan exists (M6).
+  const planner = new PlannerService({
+    db: database.db,
+    settings,
+    onChange: calendarChanges.emit,
+    onReplan: replans.emit,
+    log,
+  });
+  const onPlanEvent = planner.notify;
+  const tasks = new TasksService({
+    db: database.db,
+    settings,
+    onChange: taskChanges.emit,
+    onPlanEvent,
+  });
   const services: Services = {
     settings,
     backup: new BackupService({
@@ -85,11 +103,23 @@ export function startRuntime(paths: AppPaths, log: Logger): Runtime {
     }),
     grades: new GradesService({ db: database.db }),
     tasks,
-    timer: new TimerService({ db: database.db, settings, tasks, onChange: taskChanges.emit }),
-    calendar: new CalendarService({ db: database.db, settings, onChange: calendarChanges.emit }),
-    planner: new PlannerService({ db: database.db, settings, onChange: calendarChanges.emit }),
+    timer: new TimerService({
+      db: database.db,
+      settings,
+      tasks,
+      onChange: taskChanges.emit,
+      onPlanEvent,
+    }),
+    calendar: new CalendarService({
+      db: database.db,
+      settings,
+      onChange: calendarChanges.emit,
+      onPlanEvent,
+    }),
+    planner,
     taskChanges,
     calendarChanges,
+    replans,
   };
   log.info(`Database ready: ${paths.dbFile}`);
   return { ok: true, database, services };

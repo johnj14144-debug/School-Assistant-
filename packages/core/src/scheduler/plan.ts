@@ -23,6 +23,11 @@ import type { PlanOption, PlanWarning } from './schemas';
  *    least soft work late) wins. What still doesn't fit becomes a warning with options.
  *
  * Every block carries a "why here" reason.
+ *
+ * Re-planning (M6, ADR 0012) is `replan`: the same steps, but the last plan's blocks that still
+ * work stay where they are (sticky) and only the rest is placed in the time left. When keeping
+ * them would cost a deadline that a fresh plan meets, it keeps less: only blocks after the last
+ * due date in trouble, and failing that nothing (a fresh plan).
  */
 
 export interface PlanTask {
@@ -101,6 +106,8 @@ export interface PlannedBlock {
   endAt: string;
   kind: BlockKind;
   reason: string;
+  /** Re-planning: the last plan's block this one keeps (its times may be shorter). */
+  previousId?: string;
 }
 
 export interface PlanOutcome {
@@ -111,48 +118,187 @@ export interface PlanOutcome {
   from: string;
 }
 
+/** A block of the last plan that a re-plan may keep: the planner's own, unlocked, not started. */
+export interface PreviousBlock {
+  id: string;
+  taskId: string;
+  startAt: string;
+  endAt: string;
+  kind: BlockKind;
+}
+
+export interface ReplanInput extends PlanInput {
+  previous: readonly PreviousBlock[];
+  /**
+   * Blocks starting before this lose their place and are planned again as early as they fit:
+   * finishing early re-packs the rest of the day (owner decision Q12).
+   */
+  repackUntil?: Date | null;
+  /**
+   * A task whose block was missed (a late start, then "Re-plan now", Q13): its work starts in
+   * the first free time, cut to fit there if needed. Nothing else moves for it.
+   */
+  startNowTaskId?: string | null;
+}
+
+/**
+ * How much of the last plan a re-plan kept: everything that still works (`none`), only blocks
+ * after the last due date in trouble (`partial`), or nothing, because only a fresh plan met the
+ * deadlines (`full`).
+ */
+export type ReplanFallback = 'none' | 'partial' | 'full';
+
+export interface ReplanOutcome extends PlanOutcome {
+  fallback: ReplanFallback;
+}
+
 /** Share of free time that becomes work once breaks and short gaps are paid for. */
 const EFFICIENCY = 0.75;
 const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, normal: 1, low: 2 };
 
 const slots = (minutes: number) => Math.ceil(minutes / SLOT_MIN);
 
+/** "Plan my week": a fresh plan from now to `until`. */
 export function planWeek(input: PlanInput): PlanOutcome {
+  const ctx = context(input);
+  const { blocks, warnings } = attempt(ctx, null, null);
+  return { blocks, warnings, from: new Date(ctx.base.start).toISOString() };
+}
+
+/**
+ * Re-plans from now, keeping what still works of the last plan (stickiness, M6): a previous
+ * block stays if it's still free (no new overlap, its breaks kept), its task still needs that
+ * much work, and it's before a hard due date. Everything else is placed in the time left. If
+ * keeping blocks costs a deadline that a fresh plan meets, it keeps fewer (see
+ * `ReplanFallback`).
+ */
+export function replan(input: ReplanInput): ReplanOutcome {
+  const ctx = context(input);
+  const pin = input.startNowTaskId ?? null;
+  const repack = input.repackUntil?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const done = (a: Attempt, fallback: ReplanFallback): ReplanOutcome => ({
+    blocks: a.blocks,
+    warnings: a.warnings,
+    from: new Date(ctx.base.start).toISOString(),
+    fallback,
+  });
+  const sticky = attempt(ctx, chooseSticky(ctx, input.previous, repack), pin);
+  if (sticky.missing === 0 && sticky.late === 0) return done(sticky, 'none');
+  const fresh = attempt(ctx, null, pin);
+  if (!worse(sticky, fresh)) return done(sticky, 'none');
+  // Free the time up to the last due date in trouble; keep what comes after it.
+  const troubled = sticky.warnings
+    .filter((w) => w.kind !== 'spent')
+    .map((w) => Date.parse(w.dueAt));
+  const horizon = Math.max(Number.NEGATIVE_INFINITY, ...troubled);
+  if (horizon > repack) {
+    const partial = attempt(ctx, chooseSticky(ctx, input.previous, horizon), pin);
+    if (!worse(partial, fresh)) return done(partial, 'partial');
+  }
+  return done(fresh, 'full');
+}
+
+const worse = (a: Attempt, b: Attempt) =>
+  a.missing > b.missing || (a.missing === b.missing && a.late > b.late);
+
+// One planning pass
+
+interface Context {
+  input: PlanInput;
+  settings: PlanSettings;
+  /** Fixed events and kept blocks. */
+  base: Grid;
+  say: Wording;
+  /** The end slot of kept work that ended before the plan starts (it still earns its break). */
+  workEndBefore: number;
+  /** The first slot (at or past the plan's end) where kept work starts after the plan. */
+  workStartAfter: number;
+}
+
+function context(input: PlanInput): Context {
   const settings = { ...DEFAULT_PLAN_SETTINGS, ...input.settings };
   const start = Math.ceil(input.now.getTime() / SLOT_MS) * SLOT_MS;
   const size = Math.max(0, Math.floor((input.until.getTime() - start) / SLOT_MS));
-  const grid = Grid.create(start, size, input.timeZone);
+  const base = Grid.create(start, size, input.timeZone);
   for (const f of input.fixed) {
-    grid.mark(Date.parse(f.startAt), Date.parse(f.endAt), isHard(f.kind) ? HARD : SOFT);
+    base.mark(Date.parse(f.startAt), Date.parse(f.endAt), isHard(f.kind) ? HARD : SOFT);
   }
+  let workEndBefore = Number.NEGATIVE_INFINITY;
+  let workStartAfter = Number.POSITIVE_INFINITY;
   for (const k of input.kept) {
+    const end = Date.parse(k.endAt);
+    const begin = Date.parse(k.startAt);
+    if (k.mode === 'work' && end <= start) workEndBefore = Math.max(workEndBefore, base.ceil(end));
+    // Work just past the plan's end isn't on the grid, but still needs its break before it.
+    if (k.mode === 'work' && begin >= base.time(size)) {
+      workStartAfter = Math.min(workStartAfter, base.floor(begin));
+    }
     if (k.mode === 'background') continue;
-    grid.mark(Date.parse(k.startAt), Date.parse(k.endAt), k.mode === 'work' ? WORK : BUSY);
+    base.mark(Date.parse(k.startAt), end, k.mode === 'work' ? WORK : BUSY);
   }
-  const say = new Wording(input.timeZone);
+  return {
+    input,
+    settings,
+    base,
+    say: new Wording(input.timeZone),
+    workEndBefore,
+    workStartAfter,
+  };
+}
+
+interface Attempt {
+  blocks: PlannedBlock[];
+  warnings: PlanWarning[];
+  /** Slots of hard-deadline work that miss their due date. */
+  missing: number;
+  /** Slots of soft-deadline work after (or not before) their due date. */
+  late: number;
+}
+
+/** Plans everything around what stays from the last plan (`sticky`, none for a fresh plan). */
+function attempt(ctx: Context, sticky: Sticky | null, pinTaskId: string | null): Attempt {
+  const { input, settings, say } = ctx;
+  const grid = ctx.base.clone();
   const warnings: PlanWarning[] = [];
   const blocks: PlannedBlock[] = [];
+  let missing = 0;
+  let late = 0;
+  const keptSequences = sticky?.sequences ?? new Map<string, KeptSequence>();
+  const pre = sticky?.focus ?? [];
+  // What stays from the last plan takes its time first.
+  for (const kept of keptSequences.values()) {
+    kept.segments.forEach((seg, i) => {
+      const at = kept.positions[i] as number;
+      if (seg.kind === 'step') grid.markSlots(at, at + seg.slots, BUSY);
+    });
+  }
+  for (const c of pre) grid.markSlots(c.start, c.start + c.len, WORK);
 
   // 1. Sequences: tasks with steps, and background tasks.
-  const sequences = input.tasks
-    .filter((t) => t.steps.length > 0 || (t.background && t.remainingMin > 0))
-    .sort(edfOrder);
+  const sequences = input.tasks.filter(isSequence).sort(edfOrder);
   for (const task of sequences) {
-    const placed = placeSequence(grid, task, settings, say);
+    const kept = keptSequences.get(task.id);
+    const placed = kept
+      ? keptSequence(grid, task, kept, say)
+      : placeSequence(grid, task, settings, say);
     if (placed.kind === 'none') {
       if (Date.parse(task.dueAt) <= input.until.getTime()) {
         warnings.push(unplacedWarning(task, say));
+        const need = segmentsOf(task).reduce((sum, seg) => sum + seg.slots, 0);
+        if (task.deadline === 'hard') missing += need;
+        else late += need;
       }
       continue;
     }
     blocks.push(...placed.blocks);
-    if (placed.kind === 'late') warnings.push(lateWarning(task, placed.endMs, 0, say));
+    if (placed.kind === 'late') {
+      warnings.push(lateWarning(task, placed.endMs, 0, say));
+      late += Math.max(0, Math.ceil((placed.endMs - Date.parse(task.dueAt)) / SLOT_MS));
+    }
   }
 
   // 2. Focus and light work, with fallbacks when something misses its due date.
-  const focusTasks = input.tasks.filter(
-    (t) => t.steps.length === 0 && !t.background && t.remainingMin > 0,
-  );
+  const focusTasks = input.tasks.filter(isFocus);
   const all = { interleave: settings.interleave, oneSitting: true, running: true };
   const none = { interleave: false, oneSitting: false, running: false };
   const variants: Variant[] = [
@@ -164,7 +310,7 @@ export function planWeek(input: PlanInput): PlanOutcome {
   ];
   let best: FocusResult | null = null;
   for (const variant of variants) {
-    const result = placeFocus(grid.clone(), focusTasks, input, settings, variant);
+    const result = placeFocus(ctx, grid.clone(), focusTasks, variant, pre, pinTaskId);
     if (
       !best ||
       result.missing < best.missing ||
@@ -177,14 +323,19 @@ export function planWeek(input: PlanInput): PlanOutcome {
   if (best) {
     blocks.push(...focusBlocks(best, say));
     warnings.push(...focusWarnings(best, input, say));
+    missing += best.missing;
+    late += best.late;
   }
 
   blocks.sort((a, b) => a.startAt.localeCompare(b.startAt) || kindRank(a) - kindRank(b));
-  return { blocks, warnings, from: new Date(start).toISOString() };
+  return { blocks, warnings, missing, late };
 }
 
 const isHard = (kind: FixedEventKind) => kind === 'sleep' || kind === 'class' || kind === 'other';
 const kindRank = (b: PlannedBlock) => (b.kind === 'wait' ? 1 : 0);
+/** Planned as a sequence: steps with waits, or a background task's one block. */
+const isSequence = (t: PlanTask) => t.steps.length > 0 || (t.background && t.remainingMin > 0);
+const isFocus = (t: PlanTask) => t.steps.length === 0 && !t.background && t.remainingMin > 0;
 
 function edfOrder(a: PlanTask, b: PlanTask): number {
   if (a.dueAt !== b.dueAt) return a.dueAt < b.dueAt ? -1 : 1;
@@ -293,32 +444,215 @@ function placeSequence(
     late = fit !== null;
   }
   if (!fit) return { kind: 'none' };
-
-  const blocks: PlannedBlock[] = [];
-  const handsOn = segments.filter((s) => s.kind === 'step').length;
-  let stepNumber = 0;
   segments.forEach((seg, i) => {
     const at = fit.positions[i] as number;
     if (seg.kind === 'step') grid.markSlots(at, at + seg.slots, BUSY);
+  });
+  return {
+    kind: late ? 'late' : 'on-time',
+    blocks: sequenceBlocks(grid, task, segments, fit.positions, { late, say }),
+    endMs: grid.time(fit.end),
+  };
+}
+
+/** A sequence kept from the last plan (its steps are already marked). */
+function keptSequence(
+  grid: Grid,
+  task: PlanTask,
+  kept: KeptSequence,
+  say: Wording,
+): SequencePlacement {
+  const endMs = grid.time(kept.end);
+  const late = endMs > Date.parse(task.dueAt);
+  const blocks = sequenceBlocks(grid, task, kept.segments, kept.positions, {
+    late,
+    say,
+    previousIds: kept.previousIds,
+  });
+  return { kind: late ? 'late' : 'on-time', blocks, endMs };
+}
+
+function sequenceBlocks(
+  grid: Grid,
+  task: PlanTask,
+  segments: Segment[],
+  positions: number[],
+  ctx: { late: boolean; say: Wording; previousIds?: string[] },
+): PlannedBlock[] {
+  const handsOn = segments.filter((s) => s.kind === 'step').length;
+  let stepNumber = 0;
+  return segments.map((seg, i) => {
+    const at = positions[i] as number;
     if (seg.kind === 'step') stepNumber++;
-    const startMs = grid.time(at);
     const prev = segments[i - 1];
-    blocks.push({
+    const previousId = ctx.previousIds?.[i];
+    return {
       taskId: task.id,
       title: seg.kind === 'work' ? '' : `${task.title}: ${seg.title || 'waiting'}`,
-      startAt: new Date(startMs).toISOString(),
+      startAt: new Date(grid.time(at)).toISOString(),
       endAt: new Date(grid.time(at + seg.slots)).toISOString(),
       kind: seg.kind,
-      reason: say.sequenceReason(task, seg, {
+      reason: ctx.say.sequenceReason(task, seg, {
         stepNumber,
         handsOn,
         afterWait: prev?.kind === 'wait' ? prev.slots * SLOT_MIN : null,
-        late,
+        late: ctx.late,
+        kept: previousId !== undefined,
       }),
-    });
+      ...(previousId !== undefined && { previousId }),
+    };
   });
-  return { kind: late ? 'late' : 'on-time', blocks, endMs: grid.time(fit.end) };
 }
+
+// Stickiness (M6): what a re-plan keeps of the last plan
+
+/** A focus block kept from the last plan, maybe shortened. */
+interface PreChunk {
+  taskId: string;
+  previousId: string;
+  start: number;
+  len: number;
+}
+
+/** A sequence kept whole, exactly where it was. */
+interface KeptSequence {
+  segments: Segment[];
+  positions: number[];
+  previousIds: string[];
+  end: number;
+}
+
+interface Sticky {
+  sequences: Map<string, KeptSequence>;
+  focus: PreChunk[];
+}
+
+/**
+ * The previous blocks that can stay where they are, given what has changed: each must start at
+ * or after `releaseBefore` (earlier ones are planned again), sit on free time with its breaks,
+ * respect its task's earliest start and hard due date, and fit its task's work left. A sequence
+ * stays only whole and unchanged. A task keeps its focus blocks in time order up to its work
+ * left (the last one may be shortened), never leaving less than a minimum chunk to plan anew.
+ */
+function chooseSticky(
+  ctx: Context,
+  previous: readonly PreviousBlock[],
+  releaseBefore: number,
+): Sticky {
+  const { input, settings } = ctx;
+  const grid = ctx.base.clone();
+  const tasks = new Map(input.tasks.map((t) => [t.id, t]));
+  const brk = slots(settings.breakMin);
+  const from = Math.max(grid.start, releaseBefore);
+  const end = grid.time(grid.size);
+  const slotsOf = (b: PreviousBlock): [number, number] | null => {
+    const s = Date.parse(b.startAt);
+    const e = Date.parse(b.endAt);
+    if (s < from || e > end || e <= s) return null;
+    if ((s - grid.start) % SLOT_MS !== 0 || (e - grid.start) % SLOT_MS !== 0) return null;
+    return [grid.floor(s), grid.floor(e)];
+  };
+  const release = (t: PlanTask) =>
+    t.earliestStartAt ? grid.ceil(Date.parse(t.earliestStartAt)) : Number.NEGATIVE_INFINITY;
+  const due = (t: PlanTask) => grid.floor(Date.parse(t.dueAt));
+  const byTask = new Map<string, PreviousBlock[]>();
+  for (const b of [...previous].sort(byStart)) {
+    byTask.set(b.taskId, [...(byTask.get(b.taskId) ?? []), b]);
+  }
+
+  const sequences = new Map<string, KeptSequence>();
+  for (const task of input.tasks.filter(isSequence).sort(edfOrder)) {
+    const prev = byTask.get(task.id);
+    const segments = segmentsOf(task);
+    if (!prev || prev.length !== segments.length) continue;
+    const spans = prev.map(slotsOf);
+    const same = spans.every((span, i) => {
+      const seg = segments[i] as Segment;
+      return span !== null && prev[i]?.kind === seg.kind && span[1] - span[0] === seg.slots;
+    });
+    const first = spans[0]?.[0];
+    if (!same || first === undefined || first < release(task)) continue;
+    const fit = fitAt(grid, first, segments, slots(settings.stepToleranceMin));
+    if (!fit || fit.positions.some((p, i) => p !== spans[i]?.[0])) continue;
+    if (task.deadline === 'hard' && fit.end > due(task)) continue;
+    segments.forEach((seg, i) => {
+      const at = fit.positions[i] as number;
+      if (seg.kind === 'step') grid.markSlots(at, at + seg.slots, BUSY);
+    });
+    sequences.set(task.id, {
+      segments,
+      positions: fit.positions,
+      previousIds: prev.map((b) => b.id),
+      end: fit.end,
+    });
+  }
+
+  const valid = new Map<string, PreChunk[]>();
+  for (const b of [...previous].sort(byStart)) {
+    const task = tasks.get(b.taskId);
+    const span = slotsOf(b);
+    if (!task || !isFocus(task) || b.kind !== 'work' || !span) continue;
+    const [s, e] = span;
+    const len = e - s;
+    const minLen = Math.max(1, slots(task.minChunkMin));
+    const maxLen = Math.max(slots(settings.maxChunkMin), minLen);
+    const sized =
+      len >= Math.min(minLen, slots(task.remainingMin)) &&
+      (!task.splittable || len <= maxLen || len < 2 * minLen);
+    if (!sized || s < release(task) || (task.deadline === 'hard' && e > due(task))) continue;
+    if (!grid.isFree(s, e) || s < ctx.workEndBefore + brk) continue;
+    if (grid.hasFlag(s - brk, s, WORK) || grid.hasFlag(e, e + brk, WORK)) continue;
+    if (e + brk > ctx.workStartAfter) continue;
+    grid.markSlots(s, e, WORK);
+    valid.set(task.id, [
+      ...(valid.get(task.id) ?? []),
+      { taskId: task.id, previousId: b.id, start: s, len },
+    ]);
+  }
+  const focus: PreChunk[] = [];
+  for (const [taskId, chunks] of valid)
+    focus.push(...consume(tasks.get(taskId) as PlanTask, chunks));
+  return { sequences, focus: focus.sort((a, b) => a.start - b.start) };
+}
+
+/** The prefix of a task's valid blocks that its work left covers, in time order. */
+function consume(task: PlanTask, chunks: PreChunk[]): PreChunk[] {
+  const total = slots(task.remainingMin);
+  const first = chunks[0];
+  if (!task.splittable) return first && first.len >= total ? [{ ...first, len: total }] : [];
+  const minLen = Math.min(Math.max(1, slots(task.minChunkMin)), total);
+  const out: PreChunk[] = [];
+  let used = 0;
+  for (const c of chunks) {
+    if (used + c.len <= total) {
+      out.push(c);
+      used += c.len;
+      continue;
+    }
+    if (total - used >= minLen) {
+      out.push({ ...c, len: total - used });
+      used = total;
+    }
+    break;
+  }
+  // What's left to plan anew must make a chunk of the minimum: shorten the last block kept for
+  // it, or give that block up too.
+  while (out.length > 0 && total - used > 0 && total - used < minLen) {
+    const last = out.at(-1) as PreChunk;
+    const need = minLen - (total - used);
+    if (last.len - need >= minLen) {
+      out[out.length - 1] = { ...last, len: last.len - need };
+      used -= need;
+    } else {
+      out.pop();
+      used -= last.len;
+    }
+  }
+  return out;
+}
+
+const byStart = (a: PreviousBlock, b: PreviousBlock) =>
+  a.startAt.localeCompare(b.startAt) || a.id.localeCompare(b.id);
 
 // Focus and light work
 
@@ -330,7 +664,15 @@ interface Variant {
   softYield: boolean;
 }
 
-type Why = 'running' | 'one-sitting' | 'switch' | 'urgent' | 'fits' | 'late';
+type Why =
+  | 'running'
+  | 'one-sitting'
+  | 'switch'
+  | 'urgent'
+  | 'fits'
+  | 'late'
+  | 'kept'
+  | 'late-start';
 
 interface Job {
   task: PlanTask;
@@ -353,6 +695,8 @@ interface Chunk {
   spareMin: number;
   /** A soft deadline placed after hard ones (the soft-yield fallback). */
   yielded: boolean;
+  /** Kept from the last plan (re-planning). */
+  previousId?: string;
 }
 
 interface FocusResult {
@@ -365,14 +709,22 @@ interface FocusResult {
   late: number;
 }
 
+/**
+ * Focus work forward in time from slot 0. `pre` are blocks kept from the last plan (already
+ * marked on the grid); `pinTaskId`'s work takes the first free time it fits, cut to fit there.
+ */
 function placeFocus(
+  ctx: Context,
   grid: Grid,
   tasks: readonly PlanTask[],
-  input: PlanInput,
-  settings: PlanSettings,
   variant: Variant,
+  pre: readonly PreChunk[],
+  pinTaskId: string | null,
 ): FocusResult {
+  const { input, settings } = ctx;
   const brk = slots(settings.breakMin);
+  const preSlots = new Map<string, number>();
+  for (const c of pre) preSlots.set(c.taskId, (preSlots.get(c.taskId) ?? 0) + c.len);
   const order = variant.softYield
     ? (a: PlanTask, b: PlanTask) =>
         Number(a.deadline === 'soft') - Number(b.deadline === 'soft') || edfOrder(a, b)
@@ -381,7 +733,7 @@ function placeFocus(
     const minLen = Math.max(1, slots(task.minChunkMin));
     return {
       task,
-      rem: slots(task.remainingMin),
+      rem: slots(task.remainingMin) - (preSlots.get(task.id) ?? 0),
       release: task.earliestStartAt ? Math.max(0, grid.ceil(Date.parse(task.earliestStartAt))) : 0,
       due: grid.floor(Date.parse(task.dueAt)),
       minLen,
@@ -411,16 +763,17 @@ function placeFocus(
 
   /**
    * How long a chunk of `job` at `t` can be with `avail` slots of room; 0 if none fits. Work
-   * that fits in one block isn't cut up to fill a short gap unless its deadline is tight.
+   * that fits in one block isn't cut up to fill a short gap unless its deadline is tight (or
+   * `cut` says to).
    */
-  const chunkFor = (job: Job, t: number, avail: number, runEnd: number): number => {
+  const chunkFor = (job: Job, t: number, avail: number, runEnd: number, cut = false): number => {
     if (job.rem <= 0 || job.release > t) return 0;
     // Work stops at the due date; only a soft deadline's work goes on once it has passed.
     const room = keepsDue(job) || t < job.due ? Math.min(avail, job.due - t) : avail;
     if (room <= 0) return 0;
     if (!job.task.splittable) return job.rem <= room ? job.rem : 0;
     if (job.rem <= Math.min(room, job.maxLen)) return job.rem;
-    if (job.rem <= job.maxLen && !tight(job, runEnd)) return 0;
+    if (job.rem <= job.maxLen && !cut && !tight(job, runEnd)) return 0;
     // Too little to make two chunks of the minimum: one block, a little over the maximum.
     if (job.rem < 2 * job.minLen) return job.rem <= room ? job.rem : 0;
     let len = Math.min(room, job.maxLen);
@@ -455,14 +808,32 @@ function placeFocus(
   };
 
   const chunks: Chunk[] = [];
+  // Blocks kept from the last plan, by start slot: the scan passes over them.
+  const keptAt = new Map<number, Chunk>();
+  const jobOf = new Map(jobs.map((j) => [j.task.id, j]));
+  for (const c of pre) {
+    const job = jobOf.get(c.taskId);
+    if (!job) continue;
+    const chunk: Chunk = {
+      job,
+      start: c.start,
+      len: c.len,
+      why: c.start + c.len > job.due ? 'late' : 'kept',
+      spareMin: (freeBetween(c.start, job.due) - demandBy(job.due, null)) * SLOT_MIN,
+      yielded: false,
+      previousId: c.previousId,
+    };
+    chunks.push(chunk);
+    keptAt.set(c.start, chunk);
+  }
+  let placed = 0;
   let lastSubject: string | null = null;
   // Kept work that ended just before the plan starts still earns its break.
-  let lastWorkEnd = Number.NEGATIVE_INFINITY;
-  for (const k of input.kept) {
-    const end = Date.parse(k.endAt);
-    if (k.mode === 'work' && end <= grid.start) lastWorkEnd = Math.max(lastWorkEnd, grid.ceil(end));
-  }
+  let lastWorkEnd = ctx.workEndBefore;
   const runningId = variant.running ? (input.runningTaskId ?? null) : null;
+  // The late-started task goes with the running-task preference (and its fallbacks).
+  const pinJob = variant.running && pinTaskId ? (jobOf.get(pinTaskId) ?? null) : null;
+  let pinDone = false;
 
   const choose = (t: number, avail: number, runEnd: number) => {
     const candidates: { job: Job; len: number }[] = [];
@@ -470,12 +841,16 @@ function placeFocus(
       const len = chunkFor(job, t, avail, runEnd);
       if (len > 0) candidates.push({ job, len });
     }
-    const first = candidates[0];
-    if (!first) return null;
-    if (chunks.length === 0 && runningId) {
+    if (placed === 0 && runningId) {
       const running = candidates.find((c) => c.job.task.id === runningId);
       if (running) return { ...running, why: 'running' as Why };
     }
+    if (pinJob && !pinDone) {
+      const len = chunkFor(pinJob, t, avail, runEnd, true);
+      if (len > 0) return { job: pinJob, len, why: 'late-start' as Why };
+    }
+    const first = candidates[0];
+    if (!first) return null;
     if (variant.oneSitting) {
       const must = candidates.find((c) => !c.job.task.splittable && !laterRoom(c.job, runEnd));
       if (must) return { ...must, why: 'one-sitting' as Why };
@@ -499,6 +874,8 @@ function placeFocus(
     const flag = grid.flags[t] ?? 0;
     if (flag !== 0) {
       if (flag & WORK) lastWorkEnd = t + 1;
+      const kept = keptAt.get(t);
+      if (kept) lastSubject = kept.job.task.subject;
       t++;
       continue;
     }
@@ -513,6 +890,7 @@ function placeFocus(
         break;
       }
     }
+    if (runEnd >= grid.size) end = Math.min(end, ctx.workStartAfter - brk);
     if (begin >= end) {
       t = runEnd;
       continue;
@@ -531,12 +909,15 @@ function placeFocus(
     const yielded = variant.softYield && job.task.deadline === 'soft';
     grid.markSlots(t, t + len, WORK);
     chunks.push({ job, start: t, len, why, spareMin, yielded });
+    placed++;
+    if (job === pinJob) pinDone = true;
     job.rem -= len;
     lastSubject = job.task.subject;
     lastWorkEnd = t + len;
     t += len;
   }
 
+  chunks.sort((a, b) => a.start - b.start);
   const untilSlot = grid.floor(input.until.getTime());
   let missing = 0;
   let late = 0;
@@ -564,6 +945,7 @@ function focusBlocks(result: FocusResult, say: Wording): PlannedBlock[] {
       endAt: new Date(result.grid.time(c.start + c.len)).toISOString(),
       kind: 'work' as const,
       reason: say.chunkReason(c, part, parts.get(c.job) ?? 1),
+      ...(c.previousId !== undefined && { previousId: c.previousId }),
     };
   });
 }
@@ -715,6 +1097,12 @@ class Wording {
       case 'fits':
         out.push('The most urgent work that fits this gap.');
         break;
+      case 'kept':
+        out.push('Kept where it was planned.');
+        break;
+      case 'late-start':
+        out.push('The first free time after a late start.');
+        break;
       case 'late':
         break;
     }
@@ -726,7 +1114,13 @@ class Wording {
   sequenceReason(
     task: PlanTask,
     seg: Segment,
-    ctx: { stepNumber: number; handsOn: number; afterWait: number | null; late: boolean },
+    ctx: {
+      stepNumber: number;
+      handsOn: number;
+      afterWait: number | null;
+      late: boolean;
+      kept: boolean;
+    },
   ): string {
     const out: string[] = [];
     if (seg.kind === 'wait') {
@@ -742,7 +1136,10 @@ class Wording {
     }
     const due = this.due(task);
     out.push(ctx.late ? `${due}: planned after it, as a soft deadline allows.` : `${due}.`);
-    if (seg.kind !== 'wait') out.push('The first day it fits, where it splits free time least.');
+    if (ctx.kept) out.push('Kept where it was planned.');
+    else if (seg.kind !== 'wait') {
+      out.push('The first day it fits, where it splits free time least.');
+    }
     return out.join(' ');
   }
 }

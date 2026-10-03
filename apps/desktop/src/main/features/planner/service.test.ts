@@ -191,3 +191,242 @@ describe('PlannerService', () => {
     ]);
   });
 });
+
+describe('PlannerService re-planning (M6)', () => {
+  const view = (env: ReturnType<typeof setup>) =>
+    plannerBlocks(env).map((b) => `${b.label} ${b.startAt.slice(11, 16)}–${b.endAt.slice(11, 16)}`);
+
+  function planned() {
+    const env = setup();
+    const hw = env.task('Calc HW', { estimateMin: 90, dueAt: at('04:59', 9) });
+    const reading = env.task('Chem reading', { estimateMin: 60, dueAt: at('04:59', 10) });
+    const essay = env.task('Essay', { estimateMin: 120, dueAt: at('04:59', 11) });
+    env.planner.planWeek();
+    env.calendarChange.mockClear();
+    return { env, hw, reading, essay };
+  }
+
+  it('shows a late start after the grace, and "Re-plan now" moves only the late task', () => {
+    const { env, hw } = planned();
+    const before = plannerBlocks(env);
+    expect(view(env)).toEqual([
+      'Calc HW 13:00–14:30',
+      'Chem reading 15:50–16:50',
+      'Essay 17:00–18:30',
+      'Essay 18:40–19:10',
+    ]);
+    env.clock.set(at('13:09'));
+    expect(env.planner.behind()).toBeNull();
+    env.clock.set(at('13:30'));
+    expect(env.planner.behind()).toMatchObject({
+      taskId: hw.id,
+      title: 'Calc HW',
+      plannedStartAt: at('13:00'),
+      sinceAt: at('13:00'),
+      lateMin: 30,
+      stopped: false,
+    });
+    // Nothing moved on its own.
+    expect(plannerBlocks(env)).toEqual(before);
+
+    const run = env.planner.replan('manual');
+    expect(view(env)).toEqual([
+      'Calc HW 13:30–15:00',
+      'Chem reading 15:50–16:50',
+      'Essay 17:00–18:30',
+      'Essay 18:40–19:10',
+    ]);
+    // The others are the same rows.
+    expect(
+      plannerBlocks(env)
+        .slice(1)
+        .map((b) => b.id),
+    ).toEqual(before.slice(1).map((b) => b.id));
+    expect(run).toMatchObject({
+      trigger: 'manual',
+      fallback: 'none',
+      warnings: [],
+      changes: [
+        {
+          taskId: hw.id,
+          title: 'Calc HW',
+          kind: 'moved',
+          from: at('13:00'),
+          to: at('13:30'),
+          minutes: 90,
+        },
+      ],
+    });
+    expect(env.replanned).toHaveBeenCalledWith(run);
+    expect(env.planner.behind()).toBeNull();
+  });
+
+  it('counts lateness from when work stopped during the block, and keeps that time', () => {
+    const { env, hw } = planned();
+    env.timer.start(hw.id, at('13:00'));
+    env.clock.set(at('13:20'));
+    env.timer.pause();
+    env.clock.set(at('13:35'));
+    expect(env.planner.behind()).toMatchObject({
+      sinceAt: at('13:20'),
+      lateMin: 15,
+      stopped: true,
+    });
+    env.planner.replan('manual');
+    // 8:00–8:20 happened and stays on the calendar; the 70 minutes left start now (the 15
+    // minutes since the pause were the break).
+    expect(view(env).slice(0, 2)).toEqual(['Calc HW 13:00–13:35', 'Calc HW 13:35–14:45']);
+  });
+
+  it('plans nothing on its own until there is a plan', () => {
+    const env = setup();
+    env.task('Calc HW', { estimateMin: 90 });
+    expect(env.planner.flush()).toBeNull();
+    expect(plannerBlocks(env)).toEqual([]);
+    expect(env.replanned).not.toHaveBeenCalled();
+  });
+
+  it('re-plans after task edits, keeping what still works', () => {
+    const { env, essay } = planned();
+    const before = plannerBlocks(env);
+    const quiz = env.task('Quiz prep', { estimateMin: 30, dueAt: at('04:59', 8) });
+    env.update(essay.id, { estimateMin: 90 });
+    const run = env.planner.flush();
+    expect(run?.trigger).toBe('edit');
+    // The essay's second block goes (90 minutes now), and the quiz takes its time.
+    expect(view(env)).toEqual([
+      'Calc HW 13:00–14:30',
+      'Chem reading 15:50–16:50',
+      'Essay 17:00–18:30',
+      'Quiz prep 18:40–19:10',
+    ]);
+    expect(
+      plannerBlocks(env)
+        .slice(0, 3)
+        .map((b) => b.id),
+    ).toEqual(before.slice(0, 3).map((b) => b.id));
+    expect(run?.changes.map((c) => [c.title, c.kind])).toEqual([
+      ['Essay', 'removed'],
+      ['Quiz prep', 'added'],
+    ]);
+    expect(quiz.deadline).toBe('hard');
+  });
+
+  it('ends the block and re-packs the rest of today when a task is finished early', () => {
+    const { env, hw } = planned();
+    env.timer.start(hw.id, at('13:00'));
+    env.clock.set(at('13:45'));
+    env.complete(hw.id, 'Done early');
+    // The block ends at once; the re-plan follows when changes settle.
+    expect(view(env)[0]).toBe('Calc HW 13:00–13:45');
+    const run = env.planner.flush();
+    expect(run?.trigger).toBe('finish');
+    expect(view(env)).toEqual([
+      'Calc HW 13:00–13:45',
+      'Chem reading 13:55–14:55',
+      'Essay 15:50–17:20',
+      'Essay 17:30–18:00',
+    ]);
+    // A finished task's blocks going away isn't listed.
+    expect(run?.changes.map((c) => [c.title, c.kind])).toEqual([
+      ['Chem reading', 'moved'],
+      ['Essay', 'moved'],
+    ]);
+  });
+
+  it('treats stopping the timer like finishing early, but not pausing', () => {
+    const { env, hw } = planned();
+    env.timer.start(hw.id, at('13:00'));
+    env.clock.set(at('13:40'));
+    env.timer.pause();
+    expect(env.planner.flush()).toBeNull();
+    expect(view(env)[0]).toBe('Calc HW 13:00–14:30');
+    env.timer.resume();
+    env.clock.set(at('14:00'));
+    env.timer.stop();
+    expect(view(env)[0]).toBe('Calc HW 13:00–14:00');
+    expect(env.planner.flush()?.trigger).toBe('finish');
+  });
+
+  it('extends an overrunning block and pushes what follows, never into a class', () => {
+    const env = setup();
+    const hw = env.task('Calc HW', { estimateMin: 60, dueAt: at('04:59', 8) });
+    env.task('Chem reading', { estimateMin: 45, dueAt: at('04:59', 9) });
+    env.planner.planWeek();
+    expect(view(env)).toEqual(['Calc HW 13:00–14:00', 'Chem reading 14:10–14:55']);
+    env.timer.start(hw.id, at('13:00'));
+    env.clock.set(at('13:59'));
+    expect(env.planner.tick()).toBeNull();
+    // 9:01 and still going: the block grows to 9:20 and the reading moves after it.
+    env.clock.set(at('14:01'));
+    const run = env.planner.tick();
+    expect(run?.trigger).toBe('overrun');
+    expect(view(env)).toEqual(['Calc HW 13:00–14:20', 'Chem reading 15:50–16:35']);
+    expect(plannerBlocks(env)[0]?.reason).toContain('Ran over');
+    // Still covered: nothing to do.
+    env.clock.set(at('14:10'));
+    expect(env.planner.tick()).toBeNull();
+    // 9:50: the block can grow only to MATH at 10:00.
+    env.clock.set(at('14:50'));
+    env.planner.tick();
+    expect(view(env)[0]).toBe('Calc HW 13:00–15:00');
+    // In class, it can't grow at all.
+    env.clock.set(at('15:01'));
+    expect(env.planner.tick()).toBeNull();
+    expect(env.log.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps a laundry run under way whole', () => {
+    const env = setup();
+    env.task('Laundry', {
+      attention: 'background',
+      steps: [
+        { title: 'Load', minutes: 5, wait: false },
+        { title: 'washer', minutes: 45, wait: true },
+        { title: 'Fold', minutes: 15, wait: false },
+      ],
+    });
+    env.task('Study', { estimateMin: 120 });
+    env.planner.planWeek();
+    const laundry = () => plannerBlocks(env).filter((b) => b.label.startsWith('Laundry'));
+    const before = laundry();
+    // During the wait, a re-plan leaves every step where it is.
+    env.clock.set(new Date(Date.parse(before[1]?.startAt ?? '') + 10 * 60_000).toISOString());
+    env.planner.replan('manual');
+    expect(laundry()).toEqual(before);
+  });
+
+  it('moves the blocks a new class lands on, and only those', () => {
+    const { env } = planned();
+    const before = plannerBlocks(env);
+    env.fixed({
+      title: 'CHEM lab',
+      kind: 'class',
+      startDate: '2026-10-07',
+      startLocal: '12:00',
+      endLocal: '12:30',
+    });
+    const run = env.planner.flush();
+    // The lab (12:00–12:30 local) lands on the essay's first block; its 30-minute block stays.
+    expect(view(env)).toEqual([
+      'Calc HW 13:00–14:30',
+      'Chem reading 15:50–16:50',
+      'Essay 18:40–19:10',
+      'Essay 19:20–20:50',
+    ]);
+    expect(
+      plannerBlocks(env)
+        .slice(0, 3)
+        .map((b) => b.id),
+    ).toEqual([before[0], before[1], before[3]].map((b) => b?.id));
+    expect(run?.changes.map((c) => [c.title, c.kind])).toEqual([['Essay', 'moved']]);
+  });
+
+  it('clears a waiting re-plan with the plan', () => {
+    const { env } = planned();
+    env.task('Quiz prep', { estimateMin: 30 });
+    env.planner.clear();
+    expect(env.planner.flush()).toBeNull();
+    expect(plannerBlocks(env)).toEqual([]);
+  });
+});

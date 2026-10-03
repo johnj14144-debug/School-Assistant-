@@ -35,6 +35,15 @@ async function invoke<C extends IpcChannel>(page: Page, channel: C, input?: IpcI
   return result as IpcOutput<C>;
 }
 
+/** Polls `check` until it holds (waitForFunction treats an async predicate's promise as true). */
+async function until(check: () => Promise<boolean>, what: string, timeoutMs = 10_000) {
+  const end = Date.now() + timeoutMs;
+  while (!(await check())) {
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 afterAll(() => {
   rmSync(dataDir, { recursive: true, force: true });
 });
@@ -172,11 +181,10 @@ describe('School Assistant (built app)', () => {
     // Plan again: the planner's blocks are replaced, not added to.
     const firstRun = await invoke(page, 'planner:last-run');
     await page.getByRole('button', { name: 'Plan my week' }).click();
-    await page.waitForFunction(async (at) => {
-      type LooseApi = { invoke(channel: string): Promise<{ at: string } | null> };
-      const run = await (globalThis as unknown as { api: LooseApi }).api.invoke('planner:last-run');
-      return run !== null && run.at !== at;
-    }, firstRun?.at ?? '');
+    await until(async () => {
+      const run = await invoke(page, 'planner:last-run');
+      return run !== null && run.at !== firstRun?.at;
+    }, 'the second plan');
     const again = await invoke(page, 'calendar:range', {
       from: new Date(now - 3_600_000).toISOString(),
       to: new Date(now + 8 * 86_400_000).toISOString(),
@@ -184,6 +192,58 @@ describe('School Assistant (built app)', () => {
     const essayBlocks = (r: typeof range) =>
       r.blocks.filter((b) => b.source === 'planner' && b.taskId === essay.id);
     expect(essayBlocks(again)).toHaveLength(essayBlocks(range).length);
+
+    await app.close();
+    expect(pageErrors).toEqual([]);
+  });
+
+  it('follows the plan: finishing early, edits and "Re-plan now" (M6)', async () => {
+    const { app, page } = await launch();
+    const waitForTrigger = (trigger: string) =>
+      until(
+        async () => (await invoke(page, 'planner:last-run'))?.trigger === trigger,
+        `a re-plan (${trigger})`,
+      );
+    const blocksNow = async () => {
+      const now = Date.now();
+      return (
+        await invoke(page, 'calendar:range', {
+          from: new Date(now - 3 * 3_600_000).toISOString(),
+          to: new Date(now + 8 * 86_400_000).toISOString(),
+        })
+      ).blocks;
+    };
+
+    // "Planned task" has run since the routine test, inside its block: finishing it ends the
+    // block now, and the rest of the day is re-packed.
+    await page.getByRole('link', { name: 'Today', exact: true }).click();
+    await page.getByTestId('timer-bar').getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Mark done' }).click();
+    await waitForTrigger('finish');
+    const finished = (await blocksNow()).find((b) => b.label === 'Planned task');
+    expect(Date.parse(finished?.endAt ?? '')).toBeLessThanOrEqual(Date.now());
+
+    // A new task is planned on its own, and the toast says so.
+    const quiz = await invoke(page, 'task:create', {
+      title: 'Quiz prep',
+      estimateMin: 30,
+      dueAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    await waitForTrigger('edit');
+    expect((await blocksNow()).some((b) => b.taskId === quiz.id && b.source === 'planner')).toBe(
+      true,
+    );
+    const toast = page.getByRole('status', { name: 'Plan changes' });
+    await toast.getByText('Plan updated after a change').waitFor();
+    await toast.getByText(/^Quiz prep: planned /).waitFor();
+    await toast.getByRole('button', { name: 'Dismiss' }).click();
+
+    // "Re-plan now" on the Calendar always answers.
+    await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+    await page.getByRole('button', { name: 'Re-plan now' }).click();
+    await toast.getByText(/^Re-planned/).waitFor();
+    const planned = (await blocksNow()).filter((b) => b.source === 'planner');
+    expect(planned.every((b) => b.conflict === null)).toBe(true);
 
     await app.close();
     expect(pageErrors).toEqual([]);

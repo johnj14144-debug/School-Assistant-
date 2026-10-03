@@ -1,12 +1,12 @@
 import type { PlanOption, PlanWarning } from '@sa/core';
-import { AlertTriangle, Clock, Eraser, Sparkles } from 'lucide-react';
+import { AlertTriangle, Clock, Eraser, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '../../components/Button';
 import { useLiveQuery } from '../../lib/useIpc';
 import { useNow } from '../../lib/useNow';
 import { useTaskActions } from '../timer/TaskActions';
-import { groupWarnings, OPTION_LABELS, plannedAt, runSummary } from './planText';
+import { changeText, groupWarnings, OPTION_LABELS, plannedAt, runSummary } from './planText';
 
 /** Plans the week (and, for an option, changes the task first); errors go to the toast. */
 export function usePlanWeek() {
@@ -37,18 +37,62 @@ export function usePlanWeek() {
   return { plan, planning, choose };
 }
 
-export function PlanWeekButton({ label = 'Plan my week' }: { label?: string }) {
+export function PlanWeekButton({
+  label = 'Plan my week',
+  variant = 'primary',
+}: {
+  label?: string;
+  variant?: 'primary' | 'secondary';
+}) {
   const { plan, planning } = usePlanWeek();
   return (
     <Button
-      variant="primary"
+      variant={variant}
       className="flex items-center gap-1.5"
       disabled={planning}
       onClick={() => void plan()}
-      title="Time-block the next 7 days from your tasks' due dates and estimates"
+      title="A fresh plan: time-block the next 7 days from your tasks' due dates and estimates"
     >
       <Sparkles className="size-4" /> {planning ? 'Planning…' : label}
     </Button>
+  );
+}
+
+/** "Re-plan now" (M6): keeps what still works, moves what must. The toast says what moved. */
+export function ReplanButton({ variant = 'primary' }: { variant?: 'primary' | 'secondary' }) {
+  const { run } = useTaskActions();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant={variant}
+      className="flex items-center gap-1.5"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await run(() => window.api.invoke('planner:replan'));
+        } finally {
+          setBusy(false);
+        }
+      }}
+      title="Keep what still works and move only what must, from now on"
+    >
+      <RefreshCw className="size-4" /> {busy ? 'Re-planning…' : 'Re-plan now'}
+    </Button>
+  );
+}
+
+/** The Calendar's plan buttons: "Re-plan now" leads once there is a plan. */
+export function PlanButtons() {
+  const { data: last } = useLiveQuery('planner:last-run');
+  return last ? (
+    <>
+      <ReplanButton />
+      <PlanWeekButton variant="secondary" />
+      <ClearPlanButton />
+    </>
+  ) : (
+    <PlanWeekButton />
   );
 }
 
@@ -126,6 +170,16 @@ export function PlanPanel() {
             </li>
           ))}
         </ul>
+      )}
+      {run.trigger !== 'plan' && run.changes.length > 0 && (
+        <details className="mt-2 text-zinc-600 dark:text-zinc-400">
+          <summary className="cursor-pointer">What moved ({run.changes.length})</summary>
+          <ul className="mt-1 grid gap-0.5 pl-4">
+            {run.changes.map((c) => (
+              <li key={c.taskId}>{changeText(c, now)}</li>
+            ))}
+          </ul>
+        </details>
       )}
       {unplanned.length > 0 && (
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">

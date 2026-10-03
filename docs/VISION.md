@@ -139,6 +139,30 @@ Today list, otherwise a week from today at 11:59 PM. The quick-add preview shows
   6h of free time to spare. A change of subject; everything due sooner still fits.").
 - If a timer is running, that task keeps the first block (unless that would miss a deadline).
 
+**How re-planning behaves** (chosen in M6 from Q12–Q13; to confirm, Q14):
+- **The plan follows changes on its own** once there is one: adding, editing, finishing or
+  deleting tasks, logging time, changing the routine or moving blocks re-plans about a second
+  later, and a toast says what moved. Blocks that still work stay where they are; a block moves
+  only when something now overlaps it or sits too close to it, its task needs less time, or it
+  would miss a hard due date.
+- **Finishing early** (Done, or Stop on the timer; not Pause) ends the task's block right there
+  and re-packs the rest of today: everything later today moves earlier, as tightly as it fits,
+  after a break. Later days stay put.
+- **Running over:** while a timer keeps going after its block ends, the block grows 15 minutes at
+  a time and the work it runs into moves to the next free time that fits. It never grows into
+  sleep, classes, meals or blocks you placed or locked.
+- **A late start only reminds:** 10 minutes after a planned block should have started (or after
+  you stopped working during it), Today shows "Behind plan: Calc HW should have started 25 min
+  ago" with **Re-plan now**. Nothing moves until then.
+- **Re-plan now** (Calendar, Today, Ctrl+K) starts the late task in the first free time, cut to
+  fit before the next planned block if needed (the rest goes later), and keeps everything else
+  where it is. The part of a block you worked on before stopping stays on the calendar.
+  **Plan my week** still makes a fresh plan.
+- **Deadlines come first:** if keeping blocks where they are would miss a deadline that a fresh
+  plan meets, the re-plan frees the time before that deadline (or plans fresh).
+- Locked blocks, blocks you placed or dragged, and blocks under way never move; a laundry run
+  under way stays whole.
+
 **Design rule: the algorithm plans and Claude advises.** Scheduling and re-planning are
 deterministic code: instant, free, predictable, testable. Claude handles the fuzzy parts:
 understanding texts, breaking work down, reading syllabi, researching goals, designing

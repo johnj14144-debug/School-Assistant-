@@ -9,7 +9,10 @@ import {
   type PlanOutcome,
   type PlanSettings,
   type PlanTask,
+  type PreviousBlock,
   planWeek,
+  type ReplanInput,
+  replan,
 } from './plan';
 import { fixedBetween, ms, overlaps, ROUTINE, ZONE } from './test-fixtures';
 
@@ -339,3 +342,219 @@ function clearlyFits(input: PlanInput): boolean {
     return demand <= 0.4 * usableBefore(due);
   });
 }
+
+/**
+ * Re-planning (M6): start from a plan, let time pass and things change, re-plan. The result
+ * keeps every rule, and it moves only what it must.
+ */
+describe('replan properties', () => {
+  const previousOf = (blocks: readonly PlannedBlock[]): PreviousBlock[] =>
+    blocks.map((b, i) => ({
+      id: `p${i}`,
+      taskId: b.taskId,
+      startAt: b.startAt,
+      endAt: b.endAt,
+      kind: b.kind,
+    }));
+  /** Every previous block in `which` comes back unchanged. */
+  const expectKept = (out: PlanOutcome, which: readonly PreviousBlock[]) => {
+    for (const p of which) {
+      const block = out.blocks.find((b) => b.previousId === p.id);
+      expect(block, `previous ${p.id} kept`).toBeDefined();
+      expect([block?.startAt, block?.endAt]).toEqual([p.startAt, p.endAt]);
+    }
+  };
+  const isFocusTask = (t: PlanTask | undefined) =>
+    t !== undefined && t.steps.length === 0 && !t.background;
+
+  const changeArb = fc.record({
+    advanceMin: fc.integer({ min: 0, max: 240 }),
+    drop: fc.array(fc.boolean(), { minLength: 14, maxLength: 14 }),
+    resize: fc.array(fc.option(fc.integer({ min: 1, max: 400 }), { nil: null }), {
+      minLength: 14,
+      maxLength: 14,
+    }),
+    extra: fc.array(taskArb, { maxLength: 3 }),
+    repackMin: fc.option(fc.integer({ min: 0, max: 24 * 60 }), { nil: null }),
+    startNow: fc.option(fc.integer({ min: 0, max: 16 }), { nil: null }),
+  });
+
+  it('keeps every rule after any change', () => {
+    fc.assert(
+      fc.property(scenarioArb, changeArb, (scenario, change) => {
+        const input = inputOf(scenario);
+        const first = planWeek(input);
+        const now = input.now.getTime() + change.advanceMin * MIN;
+        // Blocks under way stay as they are; past ones are history.
+        const kept = first.blocks
+          .filter((b) => ms(b.startAt) < now && ms(b.endAt) > now)
+          .map((b): PlanKept => {
+            const task = input.tasks.find((t) => t.id === b.taskId);
+            const background = b.kind === 'wait' || (b.kind === 'work' && task?.background);
+            return {
+              startAt: b.startAt,
+              endAt: b.endAt,
+              mode: background ? 'background' : b.kind === 'step' ? 'busy' : 'work',
+            };
+          });
+        const extra = inputOf({ ...scenario, tasks: change.extra }).tasks.map((t, i) => ({
+          ...t,
+          id: id(100 + i),
+        }));
+        const tasks = [
+          ...input.tasks
+            .filter((_, i) => !change.drop[i])
+            .map((t, i) => ({ ...t, remainingMin: change.resize[i] ?? t.remainingMin })),
+          ...extra,
+        ];
+        const next: ReplanInput = {
+          ...input,
+          now: new Date(now),
+          tasks,
+          kept: [...input.kept, ...kept],
+          previous: previousOf(first.blocks).filter((p) => ms(p.startAt) >= now),
+          repackUntil: change.repackMin === null ? null : new Date(now + change.repackMin * MIN),
+          startNowTaskId: change.startNow === null ? null : (tasks[change.startNow]?.id ?? null),
+        };
+        checkRules(next, replan(next));
+      }),
+      { numRuns: 300 },
+    );
+  }, 60_000);
+
+  it('keeps the whole plan when nothing changed', () => {
+    fc.assert(
+      fc.property(scenarioArb, (scenario) => {
+        const input = inputOf(scenario);
+        const previous = previousOf(planWeek(input).blocks);
+        const out = replan({ ...input, previous });
+        expect(out.fallback).toBe('none');
+        expectKept(out, previous);
+      }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+
+  it('after a late start, "Re-plan now" moves only the late task', () => {
+    let checked = 0;
+    let sticky = 0;
+    fc.assert(
+      fc.property(scenarioArb, fc.integer({ min: 15, max: 60 }), (scenario, lateMin) => {
+        const input = inputOf({ ...scenario, running: null });
+        const first = planWeek(input);
+        const tasks = new Map(input.tasks.map((t) => [t.id, t]));
+        const index = first.blocks.findIndex(
+          (b) => b.kind === 'work' && isFocusTask(tasks.get(b.taskId)),
+        );
+        const late = first.blocks[index];
+        if (!late) return;
+        const now = ms(late.startAt) + lateMin * MIN;
+        const previous = previousOf(first.blocks).filter((p) => p.id !== `p${index}`);
+        // Only when nothing else has started by then.
+        if (previous.some((p) => ms(p.startAt) < now) || now >= ms(late.endAt)) return;
+        checked++;
+        const next: ReplanInput = {
+          ...input,
+          now: new Date(now),
+          previous,
+          startNowTaskId: late.taskId,
+        };
+        const out = replan(next);
+        checkRules(next, out);
+        if (out.fallback !== 'none') return;
+        sticky++;
+        expectKept(out, previous);
+        // New blocks are the late task's, or work the first plan couldn't fit anywhere.
+        const planned = (taskId: string) =>
+          first.blocks
+            .filter((b) => b.taskId === taskId)
+            .reduce((sum, b) => sum + minutesOfBlock(b), 0);
+        const hadLeft = (taskId: string) =>
+          planned(taskId) < ceil5(tasks.get(taskId)?.remainingMin ?? 0);
+        const added = out.blocks.filter((b) => b.previousId === undefined);
+        for (const b of added) expect(b.taskId === late.taskId || hadLeft(b.taskId)).toBe(true);
+      }),
+      { numRuns: 400 },
+    );
+    expect(checked).toBeGreaterThan(100);
+    expect(sticky).toBeGreaterThan(checked * 0.8);
+  }, 60_000);
+
+  it('an overrun moves only focus work it runs into, never into sleep, classes or locked blocks', () => {
+    let checked = 0;
+    fc.assert(
+      fc.property(scenarioArb, fc.integer({ min: 1, max: 12 }), (scenario, steps) => {
+        const input = inputOf({ ...scenario, running: null });
+        const first = planWeek(input);
+        const tasks = new Map(input.tasks.map((t) => [t.id, t]));
+        const index = first.blocks.findIndex(
+          (b) => b.kind === 'work' && isFocusTask(tasks.get(b.taskId)),
+        );
+        const over = first.blocks[index];
+        if (!over) return;
+        const now = ms(over.endAt) + MIN;
+        const extendedEnd = ms(over.endAt) + steps * 5 * MIN;
+        const previous = previousOf(first.blocks).filter((p) => p.id !== `p${index}`);
+        if (previous.some((p) => ms(p.startAt) < now)) return;
+        checked++;
+        const task = tasks.get(over.taskId) as PlanTask;
+        const left = task.remainingMin - minutesOfBlock(over);
+        const next: ReplanInput = {
+          ...input,
+          now: new Date(now),
+          tasks: input.tasks.flatMap((t) =>
+            t.id !== task.id ? [t] : left > 0 ? [{ ...t, remainingMin: left }] : [],
+          ),
+          // The running block, extended, stays: like a locked block, nothing goes over it.
+          kept: [...input.kept, { startAt: over.startAt, endAt: iso(extendedEnd), mode: 'work' }],
+          previous,
+          runningTaskId: task.id,
+        };
+        const out = replan(next);
+        checkRules(next, out);
+        if (out.fallback !== 'none') return;
+        // Focus tasks whose blocks are all clear of the overrun (and its break) keep them.
+        const brk = scenario.settings.breakMin * MIN;
+        const reach = { startAt: iso(ms(over.startAt) - brk), endAt: iso(extendedEnd + brk) };
+        const near = (p: PreviousBlock) => overlaps(p, reach);
+        for (const t of next.tasks) {
+          if (!isFocusTask(t) || t.id === task.id) continue;
+          const mine = previous.filter((p) => p.taskId === t.id);
+          if (mine.some(near)) continue;
+          expectKept(out, mine);
+        }
+      }),
+      { numRuns: 400 },
+    );
+    expect(checked).toBeGreaterThan(100);
+  }, 60_000);
+
+  it('re-packing keeps every focus block after the re-pack window', () => {
+    fc.assert(
+      fc.property(scenarioArb, fc.integer({ min: 0, max: 24 * 60 }), (scenario, repackMin) => {
+        const input = inputOf(scenario);
+        const first = planWeek(input);
+        const previous = previousOf(first.blocks);
+        const repackUntil = new Date(input.now.getTime() + repackMin * MIN);
+        const next: ReplanInput = { ...input, previous, repackUntil };
+        const out = replan(next);
+        checkRules(next, out);
+        if (out.fallback !== 'none') return;
+        const tasks = new Map(input.tasks.map((t) => [t.id, t]));
+        expectKept(
+          out,
+          previous.filter(
+            (p) =>
+              p.kind === 'work' &&
+              isFocusTask(tasks.get(p.taskId)) &&
+              ms(p.startAt) >= repackUntil.getTime(),
+          ),
+        );
+      }),
+      { numRuns: 200 },
+    );
+  }, 60_000);
+});
+
+const minutesOfBlock = (b: Pick<PlannedBlock, 'startAt' | 'endAt'>) =>
+  (ms(b.endAt) - ms(b.startAt)) / MIN;

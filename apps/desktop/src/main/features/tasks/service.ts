@@ -17,6 +17,7 @@ import type { z } from 'zod';
 import type { Db } from '../../db/database';
 import { assignments, courses, tasks, timeSessions } from '../../db/schema';
 import type { SettingsService } from '../../db/settings';
+import type { PlanEventListener } from '../planner/events';
 import { loadSnapshot, normalizeInstant, type TaskSnapshot } from './snapshot';
 
 export interface TasksDeps {
@@ -26,6 +27,8 @@ export interface TasksDeps {
   newId?: () => string;
   /** Called after every change to tasks or the timer (the window and tray refresh). */
   onChange?: () => void;
+  /** Told about changes that affect the plan (the planner re-plans, M6). */
+  onPlanEvent?: PlanEventListener;
 }
 
 const PRIORITY_RANK = { high: 0, normal: 1, low: 2 } as const;
@@ -48,12 +51,14 @@ export class TasksService {
   private readonly now: () => Date;
   private readonly newId: () => string;
   private readonly changed: () => void;
+  private readonly planEvent: PlanEventListener;
 
   constructor(private readonly deps: TasksDeps) {
     this.db = deps.db;
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
     this.changed = deps.onChange ?? (() => {});
+    this.planEvent = deps.onPlanEvent ?? (() => {});
   }
 
   list(status: 'open' | 'done'): TaskListItem[] {
@@ -139,6 +144,7 @@ export class TasksService {
     };
     this.db.insert(tasks).values(task).run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
     return task;
   }
 
@@ -170,6 +176,7 @@ export class TasksService {
       .where(eq(tasks.id, id))
       .run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
     return this.require(id);
   }
 
@@ -180,6 +187,7 @@ export class TasksService {
     this.db.delete(tasks).where(eq(tasks.id, id)).run();
     this.clearPausedIfIn(removed);
     this.changed();
+    this.planEvent({ kind: 'edit' });
   }
 
   /**
@@ -211,6 +219,7 @@ export class TasksService {
     });
     this.clearPausedIfIn(subtree);
     this.changed();
+    this.planEvent({ kind: 'finish', taskIds: subtree, at: stamp });
     return this.require(id);
   }
 
@@ -222,6 +231,7 @@ export class TasksService {
       .where(eq(tasks.id, id))
       .run();
     this.changed();
+    this.planEvent({ kind: 'edit' });
     return this.require(id);
   }
 

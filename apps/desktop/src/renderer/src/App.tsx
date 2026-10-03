@@ -3,6 +3,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router';
 import type { IpcOutput } from '../../shared/ipc';
 import { StartupError } from './components/StartupError';
 import { CommandPalette } from './features/palette/CommandPalette';
+import { ReplanToast } from './features/planner/ReplanToast';
 import { TaskActionsProvider } from './features/timer/TaskActions';
 import { TimerBar } from './features/timer/TimerBar';
 import { cn } from './lib/cn';
@@ -78,6 +79,7 @@ function Layout() {
         </main>
       </div>
       <CommandPalette />
+      <ReplanToast />
     </div>
   );
 }

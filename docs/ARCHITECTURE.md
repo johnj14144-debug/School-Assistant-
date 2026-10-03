@@ -247,7 +247,7 @@ See ADR 0010.
 
 ## Scheduler (M5–M6, `packages/core/src/scheduler`)
 
-See ADR 0011.
+See ADR 0011 (planning) and ADR 0012 (re-planning).
 
 - **Inputs** (`preparePlan`): open tasks with no open subtasks (subtasks take the earliest due
   date, with its hard/soft kind, and the latest earliest start up their tree); work left =
@@ -271,23 +271,40 @@ See ADR 0011.
 - **Output:** blocks (`work`, `step`, `wait`) with a "why here" `reason`, and warnings
   (`short`, `overdue`, `late` for soft deadlines, `unplaced`, `spent`) with options
   (`make-soft`, `allow-split`, `edit-task`).
-- **Main** (`features/planner/service.ts`): `planWeek()` loads everything, replaces the
-  planner's own unlocked not-yet-started blocks in one transaction, stores the summary in the
-  `planner.lastRun` setting and fires `calendar:changed`; `clear()`; preferences
-  (`planner.maxChunkMin` 90, `planner.breakMin` 10, `planner.defaultEstimateMin` 60). Dragging a
-  planner block makes it manual.
+- **Re-plan (M6, `replan`):** the same passes, but the planner's previous unlocked,
+  not-started blocks stay when they still work (free, with breaks, within the task's work left
+  and hard due date; sequences only whole), and the rest is placed in the time left. Options:
+  `repackUntil` (blocks before it are placed again ASAP: finishing early re-packs today) and
+  `startNowTaskId` (a late task takes the first free time, cut to fit). If stickiness costs a
+  deadline a fresh plan meets, it frees the time up to that deadline (`partial`) or plans fresh
+  (`full`). `changes.ts`: `diffPlans` (moved / added / removed per task) and `behindPlan` (a
+  planned work block under way, unworked for the grace).
+- **Main** (`features/planner/service.ts`): `planWeek()` (fresh) and `replan(trigger)` share
+  one run: load everything, sort future blocks into frozen (manual, locked, under way; a laundry
+  run under way stays whole), movable (the planner's own, not started) and missed (under way,
+  task not timed; only "Re-plan now" moves them), plan, write in one transaction (kept blocks keep
+  their rows), store `planner.lastRun` (with `trigger`, `fallback`, `changes`), fire
+  `calendar:changed` and, for re-plans, `planner:replanned`. Following changes once a plan exists:
+  task, timer and calendar services report `edit`/`finish` events (`features/planner/events.ts`)
+  to `notify`, which trims a finished task's block at once and re-plans 1 s after changes settle
+  (`finish` re-packs today); `tick()` every minute grows an overrunning block 15 minutes past now
+  (never into the routine or blocks that stay) and re-plans; `behind()` for Today (10-minute
+  grace). Recently ended work (within the break) counts as kept work, so a re-pack starts after a
+  break. `clear()`; preferences (`planner.maxChunkMin` 90, `planner.breakMin` 10,
+  `planner.defaultEstimateMin` 60). Dragging a planner block makes it manual.
   Every block's overlap rules use `isBackgroundBlock(kind, attention)`.
 - **UI:** "Plan my week" and "Clear plan" on the Calendar page with the plan panel (summary,
-  warnings with option buttons, unplanned tasks), "Plan my week" in the Ctrl+K palette and on an
-  empty Today schedule, "Why here" in the block dialog, planner and wait styles on the calendar,
-  a Planning section in the task form (not before, shortest block, one sitting, plan late,
-  steps) and a Planner section in Settings.
-- **Re-plan (M6):** freeze the past and anything in progress, then re-place the rest from now.
-  Prefer existing placements (stickiness) so the plan doesn't churn.
-- **Tests:** unit scenarios, a realistic week (25 tasks, under 1 s), and fast-check properties:
-  no hands-on overlaps, nothing in sleep/classes/commitments, breaks, chunk sizes, earliest
-  starts and due dates respected, steps in order, and deadlines met whenever the work clearly
-  fits.
+  warnings with option buttons, unplanned tasks, "What moved"), "Re-plan now" leading once a plan
+  exists, both in the Ctrl+K palette, "Plan my week" on an empty Today schedule, Today's "Behind
+  plan" banner with "Re-plan now", a toast after re-plans (`ReplanToast`), "Why here" in the
+  block dialog, planner and wait styles on the calendar, a Planning section in the task form (not
+  before, shortest block, one sitting, steps) and a Planner section in Settings.
+- **Tests:** unit scenarios, a realistic week (25 tasks, under 1 s; re-planned after a late
+  start with only the late task moving), and fast-check properties: no hands-on overlaps,
+  nothing in sleep/classes/commitments, breaks, chunk sizes, earliest starts and due dates
+  respected, steps in order, deadlines met whenever the work clearly fits; and for re-plans:
+  every rule after any change, the whole plan kept when nothing changed, a late start moving
+  only the late task, overruns and re-packing leaving the rest in place.
 
 ## Estimator (M7, `packages/core/src/estimator`)
 
