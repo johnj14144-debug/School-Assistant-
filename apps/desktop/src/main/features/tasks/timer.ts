@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   findConflict,
+  planMoveStart,
   planStart,
   type SessionSpan,
   type sessionCreateSchema,
@@ -99,7 +100,7 @@ export class TimerService {
     const plan = planStart(taskId, at, this.rules(snap));
     switch (plan.kind) {
       case 'running':
-        if (startAt) return this.updateSession({ id: plan.session.id, startAt: at });
+        if (startAt) return this.moveStart(snap, plan.session, at);
         return this.state();
       case 'before-running': {
         const title = snap.byId.get(plan.session.taskId)?.title ?? 'The running task';
@@ -119,6 +120,33 @@ export class TimerService {
         });
     }
     if (!snap.isBackground(taskId)) this.deps.settings.set('timer.paused', null);
+    this.changed();
+    return this.state();
+  }
+
+  /**
+   * "I actually started at…" for a running timer. After a switch from another task, that task's
+   * session now ends at the new start too.
+   */
+  private moveStart(snap: TaskSnapshot, session: SessionSpan, startAt: string): TimerState {
+    const move = planMoveStart(session, startAt, this.rules(snap));
+    if (move.kind === 'before-previous') {
+      const title = snap.byId.get(move.session.taskId)?.title ?? 'The previous task';
+      throw new Error(
+        `That's before ${title} started (${formatTime(move.session.startAt)}). Pick a later ` +
+          'time, or edit that session first.',
+      );
+    }
+    if (move.kind === 'overlap') throw this.overlapError(snap, move.session);
+    this.db.transaction((tx) => {
+      if (move.trim) {
+        tx.update(timeSessions)
+          .set({ endAt: startAt })
+          .where(eq(timeSessions.id, move.trim.id))
+          .run();
+      }
+      tx.update(timeSessions).set({ startAt }).where(eq(timeSessions.id, session.id)).run();
+    });
     this.changed();
     return this.state();
   }

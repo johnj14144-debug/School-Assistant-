@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   findConflict,
   minutesWithin,
+  planMoveStart,
   planStart,
   type SessionRules,
   type SessionSpan,
@@ -126,5 +127,36 @@ describe('planStart', () => {
       session: done,
     });
     expect(planStart('essay', t('14:00'), rules([done]))).toEqual({ kind: 'ok', close: [] });
+  });
+});
+
+describe('planMoveStart', () => {
+  it('moves a switch earlier: the task it took over from ends at the new start', () => {
+    const read = span('read1', 'read', '14:00', '14:40');
+    const calc = span('calc1', 'calc', '14:40', null);
+    expect(planMoveStart(calc, t('14:30'), rules([read, calc]))).toEqual({
+      kind: 'ok',
+      trim: { ...read, endAt: t('14:30') },
+    });
+    expect(planMoveStart(calc, t('14:00'), rules([read, calc]))).toEqual({
+      kind: 'before-previous',
+      session: read,
+    });
+  });
+
+  it('leaves other sessions alone and reports real overlaps', () => {
+    const email = span('email', 'email', '13:00', '13:30');
+    const read = span('read1', 'read', '14:00', '14:20');
+    const calc = span('calc1', 'calc', '14:40', null);
+    const all = rules([email, read, calc]);
+    expect(planMoveStart(calc, t('14:30'), all)).toEqual({ kind: 'ok', trim: null });
+    expect(planMoveStart(calc, t('14:10'), all)).toEqual({ kind: 'overlap', session: read });
+    // A background task never took over from a focus task.
+    const longRead = span('read2', 'read', '14:00', '14:40');
+    const wash = span('wash1', 'laundry', '14:40', null);
+    expect(planMoveStart(wash, t('14:10'), rules([longRead, wash]))).toEqual({
+      kind: 'ok',
+      trim: null,
+    });
   });
 });

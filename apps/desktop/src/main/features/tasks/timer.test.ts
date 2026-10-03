@@ -105,6 +105,20 @@ describe('TimerService', () => {
       expect(timer.start(essay.id, at('14:45')).focus?.session?.startAt).toBe(at('14:45'));
     });
 
+    it('moves a timer switch earlier: the previous task stops at the new start', () => {
+      const { timer, tasks, task, clock } = setupTasks(at('14:00'));
+      const read = task('Read');
+      const calc = task('Calc');
+      timer.start(read.id);
+      clock.set(at('14:40'));
+      // Switched to Calc at 2:30 but only pressed Start at 2:40.
+      timer.start(calc.id);
+      const state = timer.start(calc.id, at('14:30'));
+      expect(state.focus?.session?.startAt).toBe(at('14:30'));
+      expect(tasks.get(read.id).sessions[0]?.endAt).toBe(at('14:30'));
+      expect(() => timer.start(calc.id, at('13:50'))).toThrow(/before Read started/);
+    });
+
     it('refuses a start before the running task began, or inside finished work', () => {
       const { timer, task, clock } = setupTasks(at('14:00'));
       const email = task('Email');

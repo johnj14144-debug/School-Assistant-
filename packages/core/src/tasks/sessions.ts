@@ -99,3 +99,45 @@ export function planStart(taskId: string, startAt: string, rules: SessionRules):
   if (conflict) return { kind: 'overlap', session: conflict };
   return { kind: 'ok', close };
 }
+
+export type MoveStartPlan =
+  /** Move the start; `trim` (the session it took over from) now ends at the new start. */
+  | { kind: 'ok'; trim: SessionSpan | null }
+  /** The new start is at or before the start of the session it took over from. */
+  | { kind: 'before-previous'; session: SessionSpan }
+  | { kind: 'overlap'; session: SessionSpan };
+
+/**
+ * "I actually started at…" for a running timer. When the timer was switched from another task
+ * (that task's session ended exactly when this one started), the switch really happened at the
+ * new start, so that session ends there instead.
+ */
+export function planMoveStart(
+  session: SessionSpan,
+  startAt: string,
+  rules: SessionRules,
+): MoveStartPlan {
+  const background = rules.isBackground(session.taskId);
+  const previous = rules.sessions.find(
+    (s) =>
+      s.id !== session.id &&
+      s.endAt !== null &&
+      Date.parse(s.endAt) === Date.parse(session.startAt) &&
+      (s.taskId === session.taskId || (!background && !rules.isBackground(s.taskId))),
+  );
+  let sessions = rules.sessions;
+  let trim: SessionSpan | null = null;
+  if (previous && Date.parse(startAt) < Date.parse(session.startAt)) {
+    if (Date.parse(startAt) <= Date.parse(previous.startAt)) {
+      return { kind: 'before-previous', session: previous };
+    }
+    const trimmed = { ...previous, endAt: startAt };
+    trim = trimmed;
+    sessions = sessions.map((s) => (s.id === trimmed.id ? trimmed : s));
+  }
+  const conflict = findConflict(
+    { ...session, startAt },
+    { sessions, isBackground: rules.isBackground },
+  );
+  return conflict ? { kind: 'overlap', session: conflict } : { kind: 'ok', trim };
+}

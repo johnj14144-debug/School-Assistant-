@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes } from 'react-router';
 import type { IpcOutput } from '../../shared/ipc';
 import { StartupError } from './components/StartupError';
+import { CommandPalette } from './features/palette/CommandPalette';
+import { TaskActionsProvider } from './features/timer/TaskActions';
+import { TimerBar } from './features/timer/TimerBar';
 import { cn } from './lib/cn';
 import { type AppRoute, pageRoutes, routes } from './routes';
 
@@ -34,6 +37,14 @@ export function App() {
   if (!status) return null;
   if (!status.ok) return <StartupError failure={status} />;
   return (
+    <TaskActionsProvider>
+      <Layout />
+    </TaskActionsProvider>
+  );
+}
+
+function Layout() {
+  return (
     <div className="flex h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <nav className="flex w-56 shrink-0 flex-col gap-1 border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mb-4 flex items-center gap-2 px-2 pt-1">
@@ -55,14 +66,18 @@ export function App() {
             ))}
         </div>
       </nav>
-      <main className="flex-1 overflow-y-auto">
-        <Routes>
-          <Route path="/" element={<Navigate to="/today" replace />} />
-          {[...routes, ...pageRoutes].map(({ path, element }) => (
-            <Route key={path} path={path} element={element} />
-          ))}
-        </Routes>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TimerBar />
+        <main className="flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<Navigate to="/today" replace />} />
+            {[...routes, ...pageRoutes].map(({ path, element }) => (
+              <Route key={path} path={path} element={element} />
+            ))}
+          </Routes>
+        </main>
+      </div>
+      <CommandPalette />
     </div>
   );
 }

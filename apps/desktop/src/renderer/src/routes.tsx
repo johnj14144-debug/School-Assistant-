@@ -16,6 +16,8 @@ import { GradesPage } from './features/grades/GradesPage';
 import { NewCoursePage } from './features/grades/NewCoursePage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
+import { HistoryPage } from './features/tasks/HistoryPage';
+import { TaskPage } from './features/tasks/TaskPage';
 import { TasksPage } from './features/tasks/TasksPage';
 import { TodayPage } from './features/today/TodayPage';
 
@@ -42,4 +44,6 @@ export const routes: AppRoute[] = [
 export const pageRoutes: { path: string; element: ReactElement }[] = [
   { path: '/grades/new', element: <NewCoursePage /> },
   { path: '/grades/:courseId', element: <CoursePage /> },
+  { path: '/tasks/history', element: <HistoryPage /> },
+  { path: '/tasks/:taskId', element: <TaskPage /> },
 ];

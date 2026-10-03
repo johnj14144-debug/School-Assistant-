@@ -10,6 +10,9 @@ import { createTray } from './tray';
 
 // Sets the userData folder to %APPDATA%/School Assistant (also in development).
 app.setName('School Assistant');
+// A throwaway profile for tests (the Playwright smoke test): data, logs and backups all go there.
+const dataDirOverride = process.env.SCHOOL_ASSISTANT_DATA_DIR;
+if (dataDirOverride) app.setPath('userData', dataDirOverride);
 // Logs go to <userData>/logs on Windows.
 app.setAppLogsPath();
 
@@ -82,7 +85,9 @@ function appPaths(): AppPaths {
     dataDir,
     logDir: app.getPath('logs'),
     dbFile: join(dataDir, 'school-assistant.db'),
-    defaultBackupFolder: join(app.getPath('documents'), 'School Assistant Backups'),
+    defaultBackupFolder: dataDirOverride
+      ? join(dataDir, 'Backups')
+      : join(app.getPath('documents'), 'School Assistant Backups'),
   };
 }
 
