@@ -125,4 +125,67 @@ describe('School Assistant (built app)', () => {
     await app.close();
     expect(pageErrors).toEqual([]);
   });
+
+  it('plans the week and says why each block is where it is', async () => {
+    const { app, page } = await launch();
+    const due = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    const essay = await invoke(page, 'task:create', {
+      title: 'Essay draft',
+      estimateMin: 120,
+      dueAt: due,
+    });
+    // No due date typed: a soft deadline a week out; no estimate: the default hour.
+    const unestimated = await invoke(page, 'task:create', { title: 'No estimate yet' });
+    expect(unestimated.deadline).toBe('soft');
+
+    await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan my week' }).click();
+    const panel = page.getByRole('region', { name: 'Plan' });
+    // Earlier tests' tasks are planned too, so only the shape of the summary is fixed.
+    await panel.getByText(/^Planned \d+ blocks?, .* of work, through/).waitFor();
+
+    const now = Date.now();
+    const range = await invoke(page, 'calendar:range', {
+      from: new Date(now - 3_600_000).toISOString(),
+      to: new Date(now + 8 * 86_400_000).toISOString(),
+    });
+    const planned = range.blocks.filter((b) => b.source === 'planner');
+    expect(planned.every((b) => b.conflict === null)).toBe(true);
+    const minutesFor = (taskId: string) =>
+      planned
+        .filter((b) => b.taskId === taskId)
+        .reduce((sum, b) => sum + (Date.parse(b.endAt) - Date.parse(b.startAt)) / 60_000, 0);
+    expect(minutesFor(essay.id)).toBe(120);
+    expect(minutesFor(unestimated.id)).toBe(60);
+
+    // The block dialog explains it (when the first block is in this week's view).
+    const weekEnd = new Date();
+    weekEnd.setHours(0, 0, 0, 0);
+    weekEnd.setDate(weekEnd.getDate() - weekEnd.getDay() + 7);
+    if (Date.parse(planned[0]?.startAt ?? '') < weekEnd.getTime()) {
+      await page.locator('.sa-planner').first().click();
+      await page.getByText('Why here').waitFor();
+      await page.getByText(/(Due|Soft deadline) .*, with .* of free time to spare/).waitFor();
+      await page.keyboard.press('Escape');
+    }
+
+    // Plan again: the planner's blocks are replaced, not added to.
+    const firstRun = await invoke(page, 'planner:last-run');
+    await page.getByRole('button', { name: 'Plan my week' }).click();
+    await page.waitForFunction(async (at) => {
+      type LooseApi = { invoke(channel: string): Promise<{ at: string } | null> };
+      const run = await (globalThis as unknown as { api: LooseApi }).api.invoke('planner:last-run');
+      return run !== null && run.at !== at;
+    }, firstRun?.at ?? '');
+    const again = await invoke(page, 'calendar:range', {
+      from: new Date(now - 3_600_000).toISOString(),
+      to: new Date(now + 8 * 86_400_000).toISOString(),
+    });
+    const essayBlocks = (r: typeof range) =>
+      r.blocks.filter((b) => b.source === 'planner' && b.taskId === essay.id);
+    expect(essayBlocks(again)).toHaveLength(essayBlocks(range).length);
+
+    await app.close();
+    expect(pageErrors).toEqual([]);
+  });
 });

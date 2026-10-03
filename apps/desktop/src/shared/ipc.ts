@@ -22,6 +22,7 @@ import {
   gradeCategorySchema,
   historyViewSchema,
   idSchema,
+  planRunSchema,
   sessionCreateSchema,
   sessionUpdateSchema,
   taskCompleteSchema,
@@ -47,6 +48,16 @@ export const backupStatusSchema = z.object({
   fileCount: z.number().int(),
 });
 export type BackupStatus = z.infer<typeof backupStatusSchema>;
+
+export const plannerPreferencesSchema = z.object({
+  /** Longest focus block (a one-sitting task may be longer). */
+  maxChunkMin: z.number().int().min(30).max(240),
+  /** Free minutes between two work blocks. */
+  breakMin: z.number().int().min(0).max(60),
+  /** Minutes planned for a task without an estimate. */
+  defaultEstimateMin: z.number().int().min(5).max(600),
+});
+export type PlannerPreferences = z.infer<typeof plannerPreferencesSchema>;
 
 /**
  * Every call the renderer can make into the main process, with zod schemas for both directions.
@@ -157,6 +168,19 @@ export const ipcContract = {
   'block:delete': { input: byId, output: z.void() },
   /** Occurrences and blocks overlapping [from, to) (at most 62 days). */
   'calendar:range': { input: calendarRangeInputSchema, output: calendarRangeSchema },
+
+  // Planner (M5)
+  /** Replaces the planner's future blocks with a plan for the next 7 days. */
+  'planner:plan-week': { input: z.void(), output: planRunSchema },
+  /** Removes the planner's future blocks (locked and under-way ones stay). */
+  'planner:clear': { input: z.void(), output: z.object({ removed: z.number().int() }) },
+  /** The last plan's summary and warnings; null before the first plan or after clearing. */
+  'planner:last-run': { input: z.void(), output: planRunSchema.nullable() },
+  'planner:preferences': { input: z.void(), output: plannerPreferencesSchema },
+  'planner:set-preferences': {
+    input: plannerPreferencesSchema.partial(),
+    output: plannerPreferencesSchema,
+  },
 } as const;
 
 export type IpcContract = typeof ipcContract;
@@ -174,7 +198,7 @@ export type IpcOutput<C extends IpcChannel> = z.output<IpcContract[C]['output']>
 export interface IpcEvents {
   /** Tasks, the Today list or the timer changed (from any window, the tray or a timer). */
   'tasks:changed': undefined;
-  /** Fixed events or blocks changed. */
+  /** Fixed events or blocks changed (by hand or by the planner). */
   'calendar:changed': undefined;
 }
 export type IpcEvent = keyof IpcEvents;

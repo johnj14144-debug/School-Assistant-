@@ -19,6 +19,34 @@ describe('TasksService', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('gives every task a due date: typed, from the assignment or parent, or a soft default', () => {
+    const { task, course, assignment } = setupTasks();
+    // Wed Oct 7, 10 AM in Houston: a week out is Wed Oct 14, 11:59 PM; tonight is Oct 7.
+    expect(task('Buy a calculator')).toMatchObject({
+      dueAt: '2026-10-15T04:59:00.000Z',
+      deadline: 'soft',
+    });
+    expect(task('Read ch. 2', { today: true })).toMatchObject({
+      dueAt: '2026-10-08T04:59:00.000Z',
+      deadline: 'soft',
+    });
+    const typed = task('Calc HW 3', { dueAt: '2026-10-09T22:00:00Z' });
+    expect(typed).toMatchObject({ dueAt: '2026-10-09T22:00:00.000Z', deadline: 'hard' });
+    expect(task('Problems 1–5', { parentId: typed.id })).toMatchObject({
+      dueAt: '2026-10-09T22:00:00.000Z',
+      deadline: 'hard',
+    });
+    const calc = course('Calc');
+    const hw = assignment(calc.id, 'HW 4', { dueAt: '2026-10-12T04:59:00.000Z' });
+    expect(task('Do HW 4', { assignmentId: hw.id })).toMatchObject({
+      dueAt: '2026-10-12T04:59:00.000Z',
+      deadline: 'hard',
+    });
+    expect(task('Reading', { dueAt: '2026-10-09T22:00:00Z', deadline: 'soft' }).deadline).toBe(
+      'soft',
+    );
+  });
+
   it('gives a subtask its parent course and type unless told otherwise', () => {
     const { task, course } = setupTasks();
     const calc = course('Calculus I', 'MATH 2413');

@@ -3,6 +3,7 @@ import { appHandlers } from './features/app/handlers';
 import { backupHandlers } from './features/backup/handlers';
 import { calendarHandlers } from './features/calendar/handlers';
 import { gradesHandlers } from './features/grades/handlers';
+import { plannerHandlers } from './features/planner/handlers';
 import { tasksHandlers } from './features/tasks/handlers';
 import type { IpcHandlers } from './ipc';
 import type { AppPaths, Runtime } from './runtime';
@@ -22,6 +23,7 @@ export function createHandlers(paths: AppPaths, runtime: Runtime): IpcHandlers {
     ...gradesHandlers(services.grades),
     ...tasksHandlers(services.tasks, services.timer),
     ...calendarHandlers(services.calendar),
+    ...plannerHandlers(services.planner),
   };
 }
 

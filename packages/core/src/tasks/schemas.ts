@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { hexColorSchema, idSchema, utcInstantSchema } from '../schemas/course';
+import { addDays, type LocalDate, type LocalDateTime } from '../time/local-date';
+import { taskStepsSchema } from './steps';
 
 /**
  * Tasks and timer sessions as stored by the app and passed over IPC. Instants are UTC ISO
@@ -15,6 +17,14 @@ export type TaskPriority = z.infer<typeof taskPrioritySchema>;
  */
 export const taskAttentionSchema = z.enum(['focus', 'light', 'background']);
 export type TaskAttention = z.infer<typeof taskAttentionSchema>;
+
+/**
+ * Every task has a due date (owner decision Q11). A `hard` one must be met: the planner never
+ * plans work after it. A `soft` one is a target: the planner aims for it, may plan work after
+ * it, and lets it slip when hard deadlines need the time.
+ */
+export const taskDeadlineSchema = z.enum(['hard', 'soft']);
+export type TaskDeadline = z.infer<typeof taskDeadlineSchema>;
 
 export const taskStatusSchema = z.enum(['open', 'done']);
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
@@ -37,11 +47,20 @@ export const taskSchema = z.object({
   quantity: z.number().min(0).nullable(),
   unit: z.string(),
   estimateMin: z.number().int().min(0).nullable(),
-  dueAt: utcInstantSchema.nullable(),
+  dueAt: utcInstantSchema,
+  deadline: taskDeadlineSchema,
   priority: taskPrioritySchema,
   attention: taskAttentionSchema,
   /** Position on the Today list; null when the task isn't on it. */
   todayOrder: z.number().int().nullable(),
+  /** The planner doesn't place work before this (M5). */
+  earliestStartAt: utcInstantSchema.nullable(),
+  /** The planner may spread the work over several blocks; false: one sitting. */
+  splittable: z.boolean(),
+  /** The shortest block worth planning for it, in minutes. */
+  minChunkMin: z.number().int().min(5).max(480),
+  /** Hands-on steps and waits (laundry); empty for an ordinary task. */
+  steps: taskStepsSchema,
   status: taskStatusSchema,
   completedAt: utcInstantSchema.nullable(),
   /** What was done, written when finishing the task. */
@@ -108,10 +127,18 @@ const taskFields = z.object({
   quantity: z.number().min(0).max(100_000).nullable(),
   unit: z.string().trim().max(30),
   estimateMin: z.number().int().min(0).max(100_000).nullable(),
-  dueAt: utcInstantSchema.nullable(),
+  dueAt: utcInstantSchema,
+  deadline: taskDeadlineSchema,
   priority: taskPrioritySchema,
   attention: taskAttentionSchema,
+  earliestStartAt: utcInstantSchema.nullable(),
+  splittable: z.boolean(),
+  minChunkMin: z.number().int().min(5).max(480),
+  steps: taskStepsSchema,
 });
+
+/** A new task's shortest planned block (M5). */
+export const DEFAULT_MIN_CHUNK_MIN = 30;
 
 export const taskCreateSchema = taskFields.extend({
   parentId: taskFields.shape.parentId.default(null),
@@ -124,13 +151,28 @@ export const taskCreateSchema = taskFields.extend({
   quantity: taskFields.shape.quantity.default(null),
   unit: taskFields.shape.unit.default(''),
   estimateMin: taskFields.shape.estimateMin.default(null),
-  dueAt: taskFields.shape.dueAt.default(null),
+  /**
+   * Left out: the assignment's due date, else the parent's for a subtask, else `defaultDue`
+   * (11:59 PM today for the Today list, a week from today otherwise).
+   */
+  dueAt: taskFields.shape.dueAt.optional(),
+  /** Left out: hard for a typed or assignment due date, the parent's, else soft. */
+  deadline: taskFields.shape.deadline.optional(),
   priority: taskPrioritySchema.default('normal'),
   attention: taskAttentionSchema.default('focus'),
+  earliestStartAt: taskFields.shape.earliestStartAt.default(null),
+  splittable: z.boolean().default(true),
+  minChunkMin: taskFields.shape.minChunkMin.default(DEFAULT_MIN_CHUNK_MIN),
+  steps: taskStepsSchema.default([]),
   /** Also put it at the end of the Today list. */
   today: z.boolean().default(false),
 });
 export const taskUpdateSchema = taskFields.partial().extend({ id: idSchema });
+
+/** A new task's due date when none is given (local time): today's or a week from today's end. */
+export function defaultDue(today: LocalDate, onTodayList: boolean): LocalDateTime {
+  return { ...addDays(today, onTodayList ? 0 : 7), hour: 23, minute: 59 };
+}
 
 export const taskCompleteSchema = z.object({
   id: idSchema,

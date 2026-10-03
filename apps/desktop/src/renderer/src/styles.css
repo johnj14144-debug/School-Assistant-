@@ -20,6 +20,21 @@ body {
   background-color: var(--fc-event-color);
 }
 
+/* A wait between steps (the washer running) runs alongside other work: lighter and striped. */
+.sa-block.sa-wait.sa-wait {
+  background-color: color-mix(in srgb, var(--fc-event-color) 45%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgb(255 255 255 / 0.18) 6px 12px
+  );
+}
+
+/* Planned by the planner (not by hand): a light inner edge tells them apart. */
+.sa-block.sa-planner {
+  box-shadow: inset 3px 0 0 rgb(255 255 255 / 0.55);
+}
+
 .sa-block.sa-done {
   opacity: 0.5;
   text-decoration: line-through;

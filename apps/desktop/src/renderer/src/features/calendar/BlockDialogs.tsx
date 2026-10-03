@@ -1,5 +1,5 @@
 import { type BlockView, formatMinutes, type OccurrenceView, type TaskListItem } from '@sa/core';
-import { AlertTriangle, Lock, LockOpen, Play, Trash2 } from 'lucide-react';
+import { AlertTriangle, Lock, LockOpen, Play, Sparkles, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '../../components/Button';
@@ -133,7 +133,8 @@ function BlockDetails({ block, onClose }: { block: BlockView; onClose: () => voi
   const { error, busy, act } = useDialogAction();
   const [title, setTitle] = useState(block.title);
   const { task } = block;
-  const canStart = task !== null && task.status === 'open' && !task.running;
+  const canStart =
+    task !== null && task.status === 'open' && !task.running && block.kind !== 'wait';
 
   async function rename(e: FormEvent) {
     e.preventDefault();
@@ -156,6 +157,19 @@ function BlockDetails({ block, onClose }: { block: BlockView; onClose: () => voi
           {task.status === 'done' && ' · done'}
           {task.running && ' · running now'}
         </p>
+      )}
+      {block.source === 'planner' && (
+        <div className="mt-3 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-950 dark:bg-indigo-500/10 dark:text-indigo-200">
+          <p className="flex items-center gap-1.5 font-medium">
+            <Sparkles className="size-4" /> Why here
+          </p>
+          <p className="mt-1">{block.reason || 'Placed by the planner.'}</p>
+          <p className="mt-1 text-xs text-indigo-800/80 dark:text-indigo-300/80">
+            {block.locked
+              ? 'Locked: “Plan my week” leaves it where it is.'
+              : 'Drag it or lock it to keep it here when you plan again.'}
+          </p>
+        </div>
       )}
       {block.conflict && (
         <p className="mt-3 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">

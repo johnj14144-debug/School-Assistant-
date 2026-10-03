@@ -7,7 +7,7 @@ import { todayLocal } from '../../lib/dates';
 import { useIpcQuery, useLiveQuery } from '../../lib/useIpc';
 import { routes } from '../../routes';
 import { QuickAddPreview } from '../tasks/QuickAddPreview';
-import { createInput, parseLine } from '../tasks/quickAdd';
+import { createInput, defaultDueLabel, parseLine } from '../tasks/quickAdd';
 import { useTaskActions } from '../timer/TaskActions';
 import { matchesQuery } from './match';
 
@@ -146,6 +146,14 @@ export function CommandPalette() {
       run: after(() => actions.resume()),
     });
   }
+  commands.push({
+    key: 'plan-week',
+    label: 'Plan my week',
+    hint: 'time-block the next 7 days',
+    run: after(async () => {
+      if (await actions.run(() => window.api.invoke('planner:plan-week'))) navigate('/calendar');
+    }),
+  });
   for (const route of routes) {
     commands.push({
       key: `go-${route.path}`,
@@ -200,7 +208,11 @@ export function CommandPalette() {
           />
           {parsed.title && (
             <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2 dark:border-zinc-800">
-              <QuickAddPreview parsed={parsed} courses={courses ?? []} />
+              <QuickAddPreview
+                parsed={parsed}
+                courses={courses ?? []}
+                defaultDue={defaultDueLabel({ today })}
+              />
               <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
                 <input
                   type="checkbox"

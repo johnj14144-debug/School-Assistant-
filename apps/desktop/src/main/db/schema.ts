@@ -1,4 +1,4 @@
-import type { LetterScale } from '@sa/core';
+import type { LetterScale, TaskStep } from '@sa/core';
 import { sql } from 'drizzle-orm';
 import {
   type AnySQLiteColumn,
@@ -113,7 +113,11 @@ export const tasks = sqliteTable(
     quantity: real('quantity'),
     unit: text('unit').notNull().default(''),
     estimateMin: integer('estimate_min'),
-    dueAt: text('due_at'),
+    /** Every task has one (owner decision Q11); `deadline` says whether it can slip. */
+    dueAt: text('due_at').notNull(),
+    deadline: text('deadline', { enum: ['hard', 'soft'] })
+      .notNull()
+      .default('hard'),
     priority: text('priority', { enum: ['low', 'normal', 'high'] })
       .notNull()
       .default('normal'),
@@ -122,6 +126,12 @@ export const tasks = sqliteTable(
       .default('focus'),
     /** Position on the Today list; null when not on it. */
     todayOrder: integer('today_order'),
+    // Planner fields (M5).
+    earliestStartAt: text('earliest_start_at'),
+    splittable: integer('splittable', { mode: 'boolean' }).notNull().default(true),
+    minChunkMin: integer('min_chunk_min').notNull().default(30),
+    /** Hands-on steps and waits, JSON `[{ title, minutes, wait }]`. */
+    steps: text('steps', { mode: 'json' }).$type<TaskStep[]>().notNull().default(sql`'[]'`),
     status: text('status', { enum: ['open', 'done'] })
       .notNull()
       .default('open'),
@@ -137,6 +147,8 @@ export const tasks = sqliteTable(
     index('task_status_idx').on(t.status),
     check('task_priority', sql`${t.priority} in ('low', 'normal', 'high')`),
     check('task_attention', sql`${t.attention} in ('focus', 'light', 'background')`),
+    check('task_deadline', sql`${t.deadline} in ('hard', 'soft')`),
+    check('task_min_chunk', sql`${t.minChunkMin} >= 5`),
     check('task_status', sql`${t.status} in ('open', 'done')`),
     check('task_completed', sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
     check('task_quantity', sql`${t.quantity} is null or ${t.quantity} >= 0`),
@@ -217,6 +229,10 @@ export const blocks = sqliteTable(
     reason: text('reason').notNull().default(''),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
+    /** `work`, a hands-on `step` or a `wait` (M5; no CHECK, so the migration is an ALTER TABLE). */
+    kind: text('kind', { enum: ['work', 'step', 'wait'] })
+      .notNull()
+      .default('work'),
   },
   (t) => [
     index('block_task_idx').on(t.taskId),

@@ -52,11 +52,14 @@ export function TaskPage() {
 
   const meta = [
     assignment && `for ${assignment.title}`,
-    task.dueAt && `due ${formatTaskDue(task.dueAt, now)}`,
+    `${task.deadline === 'soft' ? 'soft deadline' : 'due'} ${formatTaskDue(task.dueAt, now)}`,
     task.type,
     quantityText(task.quantity, task.unit),
     task.priority !== 'normal' && `${task.priority} priority`,
     task.attention !== 'focus' && task.attention,
+    task.steps.length > 0 && `${task.steps.length} steps`,
+    !task.splittable && 'one sitting',
+    task.earliestStartAt && `not before ${formatTaskDue(task.earliestStartAt, now)}`,
   ].filter(Boolean);
 
   return (

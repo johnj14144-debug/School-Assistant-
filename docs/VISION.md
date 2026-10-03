@@ -96,6 +96,48 @@ decisions log):
 - **Today page:** "Now" and "Next up" from the calendar, with Start for a block's task; the big
   card shows the task planned for now ("Planned now") before the top of the Today list.
 
+**Deadlines** (owner decision Q11): **every task has a due date**, either **hard** (must be met:
+an assignment) or **soft** (a target that may slip). A date typed in quick add or the task form
+is hard unless set to soft; a task linked to an assignment takes its due date; a subtask takes
+its parent's. A task added without a date gets a soft deadline: tonight if it goes on the
+Today list, otherwise a week from today at 11:59 PM. The quick-add preview shows which.
+
+**How the planner behaves** (chosen in M5, confirmed by the owner with two changes, Q11):
+- **Plan my week** (Calendar page, Ctrl+K, or an empty Today schedule) plans from now to the
+  end of the seventh day, today included, from each task's due date and what's left of its
+  estimate (minus time logged and blocks you placed). Running it again replaces only the
+  planner's own future blocks; blocks you placed, dragged or locked stay. **Clear plan**
+  removes the planner's blocks.
+- **Earliest deadline first, as early as possible:** work goes into the first free time.
+  Nothing goes into sleep, classes, meals, routine items or other commitments.
+- **Hard and soft deadlines:** work for a hard deadline is never planned after it. A soft
+  deadline is aimed for too, but when there's no room before it, its work is planned after it,
+  and when hard deadlines and soft ones can't all be met, the hard ones get the time.
+- **Blocks and breaks:** at most 90 minutes of focus per block, then a 10-minute break before
+  the next one (both in Settings → Planner). Each task has a shortest block (30 minutes by
+  default). Work that fits in one block isn't cut up to fill a short gap unless its deadline is
+  close. **One sitting** keeps a task in one block (a practice exam).
+- **Subjects alternate** (MATH, then CHEM, then MATH…) whenever everything due sooner still fits.
+- **No daily cap** on planned focus (monk mode): only the block and break limits above.
+- **Not before:** a task can say when it may start.
+- **Laundry-style tasks:** steps typed as "Load the washer 5m, wait 45m, Move to the dryer 5m,
+  wait 1h, Fold 15m". Each hands-on step gets a short block; the waits run alongside other work
+  (and meals), never over sleep, classes or other commitments; a step after a wait comes within
+  30 minutes. The whole sequence goes on the first day it fits, next to a meal or class when it
+  can. Background tasks without steps get one block that runs alongside.
+- **Subtasks** are planned instead of their parent and inherit its due date.
+- **Tasks without an estimate are planned** for a default length (1 hour; Settings → Planner)
+  until they get one; their blocks say so.
+- **Not planned:** tasks whose estimate (or the default) is used up while still open; the plan
+  lists them so the estimate can be raised.
+- **When work doesn't fit** before a hard due date, the plan says how much is missing and offers:
+  make the deadline soft (so the rest is planned after it), let a one-sitting task be split, or
+  edit the task. Overdue work gets the same offer. A soft deadline that isn't met is listed with
+  when the work will be done.
+- **Why here:** every planned block explains itself ("Part 2 of 3. Due Tue, Oct 6, 11:59 PM, with
+  6h of free time to spare. A change of subject; everything due sooner still fits.").
+- If a timer is running, that task keeps the first block (unless that would miss a deadline).
+
 **Design rule: the algorithm plans and Claude advises.** Scheduling and re-planning are
 deterministic code: instant, free, predictable, testable. Claude handles the fuzzy parts:
 understanding texts, breaking work down, reading syllabi, researching goals, designing
@@ -257,3 +299,4 @@ Owner answers to the first review (2026-10-02, `docs/reviews/2026-10-02-fable-re
 | Q8 | Excused ("EX") assignments | Not needed: the owner leaves excused work out of the app. Drop-lowest groups are common in the owner's classes and are covered by each category's "Drop lowest" (2026-10-03) |
 | Q9 | Timer and Today-list behavior chosen in M3 (see Planner: "How the timer and Today list behave") | Confirmed: "those all work" (2026-10-03) |
 | Q10 | Calendar behavior chosen in M4 (see Planner: "How the calendar behaves") | Confirmed with two changes (2026-10-03): background tasks can't overlap classes or commitments like tutoring and fraternity chapter; two meals, a full hour each: breakfast and a late dinner (8–9 PM) |
+| Q11 | Planner behavior chosen in M5 (see Planner: "How the planner behaves") | Confirmed with two changes (2026-10-03): tasks without an estimate are planned too (for a default length); tasks have hard and soft deadlines, so no task is without a due date. The rest (no daily cap, as early as possible, laundry steps within 30 minutes of their wait) is fine |

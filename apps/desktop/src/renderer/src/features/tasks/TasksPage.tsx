@@ -17,7 +17,6 @@ const GROUPS = [
   ['today', 'Due today'],
   ['week', 'Next 7 days'],
   ['later', 'Later'],
-  ['none', 'No due date'],
 ] as const;
 
 const DONE_PAGE = 100;

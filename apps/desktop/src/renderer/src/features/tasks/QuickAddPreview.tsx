@@ -9,15 +9,18 @@ const chip = 'rounded-full px-2 py-0.5 text-xs';
 export function QuickAddPreview({
   parsed,
   courses,
+  defaultDue,
   className,
 }: {
   parsed: QuickAdd;
   courses: readonly (QuickAddCourse & { color?: string })[];
+  /** Shown when no due date is typed: what the task gets instead. */
+  defaultDue: string;
   className?: string;
 }) {
   const course = courses.find((c) => c.id === parsed.courseId);
   const chips = [
-    parsed.due && `Due ${formatTaskDue(isoFromLocal(parsed.due))}`,
+    parsed.due ? `Due ${formatTaskDue(isoFromLocal(parsed.due))}` : parsed.title && defaultDue,
     parsed.estimateMin !== null && `~${formatMinutes(parsed.estimateMin)}`,
     course && (course.code || course.name),
     parsed.type && `@${parsed.type}`,

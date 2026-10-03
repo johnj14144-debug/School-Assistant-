@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  defaultDue,
   sessionUpdateSchema,
   taskCompleteSchema,
   taskCreateSchema,
@@ -18,11 +19,31 @@ describe('task schemas', () => {
       quantity: null,
       unit: '',
       estimateMin: null,
-      dueAt: null,
       priority: 'normal',
       attention: 'focus',
+      earliestStartAt: null,
+      splittable: true,
+      minChunkMin: 30,
+      steps: [],
       today: false,
     });
+  });
+
+  it('makes a due date a week out (or today) when none is given', () => {
+    const today = { year: 2026, month: 12, day: 28 };
+    expect(defaultDue(today, false)).toEqual({
+      year: 2027,
+      month: 1,
+      day: 4,
+      hour: 23,
+      minute: 59,
+    });
+    expect(defaultDue(today, true)).toEqual({ ...today, hour: 23, minute: 59 });
+  });
+
+  it('never clears a due date', () => {
+    expect(() => taskUpdateSchema.parse({ id, dueAt: null })).toThrow();
+    expect(() => taskCreateSchema.parse({ title: 'x', deadline: 'maybe' })).toThrow();
   });
 
   it('applies no defaults on update', () => {
@@ -35,6 +56,10 @@ describe('task schemas', () => {
     expect(() => taskCreateSchema.parse({ title: 'x', estimateMin: 1.5 })).toThrow();
     expect(() => taskCreateSchema.parse({ title: 'x', priority: 'urgent' })).toThrow();
     expect(() => taskCreateSchema.parse({ title: 'x', dueAt: '2026-10-07' })).toThrow();
+    expect(() => taskCreateSchema.parse({ title: 'x', minChunkMin: 0 })).toThrow();
+    expect(() =>
+      taskCreateSchema.parse({ title: 'x', steps: [{ title: 'Fold', minutes: 0, wait: false }] }),
+    ).toThrow();
   });
 
   it('trims the completion note', () => {
